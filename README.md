@@ -20,6 +20,10 @@ In the spirit of <a href="http://dwm.suckless.org/">dwm</a>, configuration is
 simply done by editing the source code; the header file <code>config.h</code>
 contains variables.
 
+To build, simply compile with
+
+	make
+
 
 usability
 ---------
