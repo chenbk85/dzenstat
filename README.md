@@ -8,7 +8,7 @@ It is meant to be used in combination with
 
 So to use dwmzen, you may run this command for example:
 
-	dwmstat | dzen2 -ta r
+	dwmzen | dzen2 -ta r
 
 See the dzen2 page for information about its options.
 
@@ -20,9 +20,15 @@ In the spirit of <a href="http://dwm.suckless.org/">dwm</a>, configuration is
 simply done by editing the source code; the header file <code>config.h</code>
 contains variables.
 
-As this program is still in early development, it is not yet meant to be used.
 
-Or rather: I don't use it yet.
+usability
+---------
+
+As this program is still in early development, it is not yet meant to be used.
+And even as it moves on, it's just meant to work for my needs. But you may of
+course use the source code to build your own little tools.
+
+And anyway: even I don't use it yet.
 
 
 what's wrong with conky?
