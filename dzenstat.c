@@ -11,9 +11,6 @@
 #include <time.h>
 #include <math.h>
 
-/* macros */
-#define LOG_BUFFER_SIZE 256
-
 typedef struct {
 	char *path_charge_now, *path_charge_full, *path_charge_full_design,
 	     *path_current_now, *path_capacity, *path_status;
@@ -179,6 +176,7 @@ updateCPU(void)
 
 	if ((f = fopen(cpu.path_usage, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_usage);
+	// TODO calculate usage
 	
 	// prevent from updating temperature too often:
 	static clock_t next_update = 0;

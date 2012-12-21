@@ -1,4 +1,4 @@
-/* dwmzen configuration file
+/* dzenstat configuration file
  */
 
 static bool acpi_real_capacity = false; // use design capacity for percentage?

@@ -1,14 +1,14 @@
-ayekat/dwmzen README
-====================
+ayekat/dzenstat README
+======================
 
 
-*dwmzen* is a simple monitor that prints system information out to the console.
+*dzenstat* is a simple monitor that prints system information out to the console.
 It is meant to be used in combination with
 <a href="http://github.com/robm/dzen/">dzen2</a>.
 
-So to use dwmzen, you may run this command for example:
+So to use dzenstat, you may run this command for example:
 
-	dwmzen | dzen2 -ta r
+	dzenstat | dzen2 -ta r
 
 See the dzen2 page for information about its options.
 
@@ -23,6 +23,8 @@ contains variables.
 To build, simply compile with
 
 	make
+
+This should create a binary <code>dzenstat</code> in the same directory.
 
 
 usability

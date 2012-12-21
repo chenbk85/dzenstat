@@ -1,5 +1,5 @@
-all: dwmzen.c
-	gcc -Wall -lm -o dwmzen dwmzen.c
+all: dzenstat.c
+	gcc -Wall -lm -o dzenstat dzenstat.c
 
-debug: dwmzen.c
-	gcc -Wall -g -lm -o dwmzen dwmzen.c
+debug: dzenstat.c
+	gcc -Wall -g -lm -o dzenstat dzenstat.c
