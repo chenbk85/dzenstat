@@ -17,23 +17,26 @@ typedef struct {
 	int h, m, s;
 	int charge_now, charge_full, charge_full_design, current_now, capacity;
 	bool discharging;
+	char display[128];
 } Battery;
 
 typedef struct {
 	char *path_temperature, *path_usage;
 	int temperature;
 	int usage0, usage1;
+	char display[128];
 } CPU;
 
 /* function declarations */
-static void die(char const* format, ...);
-static void display(void);
-static void init(void);
-static void initBattery(void);
-static void initCPU(void);
-static void updateBattery(void);
-static void updateCPU(void);
-static void updateDate(void);
+void die(char const* format, ...);
+void display(void);
+void init(void);
+void initBattery(void);
+void initCPU(void);
+void updateBattery(void);
+void updateColour(int percentage);
+void updateCPU(void);
+void updateDate(void);
 
 /* variables */
 Battery bat;
@@ -58,16 +61,27 @@ die(char const *format, ...)
 void
 display(void)
 {
-	int i;
 	while (true) {
 		updateBattery();
 		updateCPU();
 		updateDate();
+
+		// temperature:
 		printf("%d°C ", cpu.temperature);
-		if (bat.discharging)
-			printf("%d%% (%dh %dm %ds) ", bat.capacity, bat.h, bat.m, bat.s);
+
+		// battery:
+		printf("%s ", bat.display);
+		/*
+		if (!bat.discharging)
+			printf("^fg(#5577FF)%d%%^fg() ", bat.capacity);
+		else
+			printf("%d%% (%dh %dm %ds) ",  bat.capacity, bat.h,bat.m,bat.s);
+		*/
+
+		// time:
 		printf("^fg(#FFFFFF)%02d:%02d^fg():%02d\n",
 				date->tm_hour, date->tm_min, date->tm_sec);
+
 		nanosleep(&delay, NULL);
 	}
 }
@@ -85,20 +99,29 @@ init(void)
 void
 initBattery(void)
 {
-	// TODO ugly, path names need to be built more dynamically
-	bat.path_charge_now = "/sys/class/power_supply/BAT1/charge_now";
-	bat.path_charge_full = "/sys/class/power_supply/BAT1/charge_full";
-	bat.path_charge_full_design = "/sys/class/power_supply/BAT1/charge_full_design";
-	bat.path_current_now = "/sys/class/power_supply/BAT1/current_now";
-	bat.path_capacity = "/sys/class/power_supply/BAT1/capacity";
-	bat.path_status = "/sys/class/power_supply/BAT1/status";
+	int dirlen = strlen(battery_path)+1; // +1 for terminating null
+	bat.path_charge_now = (char*)malloc(dirlen+strlen("charge_now"));
+	sprintf(bat.path_charge_now, "%scharge_now", battery_path);
+	bat.path_charge_full = (char*)malloc(dirlen+strlen("charge_full"));
+	sprintf(bat.path_charge_full, "%scharge_full", battery_path);
+	bat.path_charge_full_design = (char*)malloc(dirlen+strlen("charge_full_design"));
+	sprintf(bat.path_charge_full_design, "%scharge_full_design", battery_path);
+	bat.path_current_now = (char*)malloc(dirlen+strlen("current_now"));
+	sprintf(bat.path_current_now, "%scurrent_now", battery_path);
+	bat.path_capacity = (char*)malloc(dirlen+strlen("capacity"));
+	sprintf(bat.path_capacity, "%scapacity", battery_path);
+	bat.path_status = (char*)malloc(dirlen+strlen("status"));
+	sprintf(bat.path_status, "%sstatus", battery_path);
 }
 
 void
 initCPU(void)
 {
-	// TODO ugly, path names need to be built more dynamically
-	cpu.path_temperature = "/sys/class/hwmon/hwmon0/device/temp1_input";
+	// temperature:
+	cpu.path_temperature = (char*)malloc(strlen(cpu_temperature_path)+1);
+	sprintf(cpu.path_temperature, "%s", cpu_temperature_path);
+
+	// usage:
 	cpu.path_usage = "/proc/stat";
 }
 
@@ -120,7 +143,7 @@ updateBattery(void)
 	fclose(f);
 
 	// capacity:
-	if (acpi_real_capacity) {
+	if (use_acpi_real_capacity) {
 		if ((f = fopen(bat.path_charge_full_design, "r")) == NULL)
 			die("Failed to open file: %s\n", bat.path_charge_full_design);
 		fscanf(f, "%d", &(bat.charge_full_design));
@@ -141,10 +164,11 @@ updateBattery(void)
 		fclose(f);
 	}
 
-	// prevent recalculating time information if charging:
+	// prevent recalculating time if charging (not displayed):
 	if (!bat.discharging)
 		return;
 
+	// time left:
 	if ((f = fopen(bat.path_charge_now, "r")) == NULL)
 		die("Failed to open file: %s\n", bat.path_charge_now);
 	fscanf(f, "%d", &(bat.charge_now));
@@ -162,11 +186,25 @@ updateBattery(void)
 	}
 	fclose(f);
 
-	// time left:
 	double hours = (double)bat.charge_now / (double)bat.current_now;
 	bat.h = (int)hours;
 	bat.m = (int)(fmod(hours, 1) * 60);
 	bat.s = (int)(fmod((fmod(hours, 1) * 60), 1) * 60);
+
+	// assemble output:
+	if (!bat.discharging)
+		sprintf(bat.display,
+				"^fg(#5577FF)%d%% ^i(%sglyph_battery_%02d.xbm)^fg()",
+				bat.capacity, icons_path, bat.capacity/10*10);
+	else
+		sprintf(bat.display, "%d%% ^i(%sglyph_battery_%02d.xbm)(%dh %dm %ds)",
+				bat.capacity, icons_path, bat.capacity/10*10,
+				bat.h, bat.m, bat.s);
+}
+
+void
+updateColour(int percentage)
+{
 }
 
 void
@@ -176,14 +214,16 @@ updateCPU(void)
 
 	if ((f = fopen(cpu.path_usage, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_usage);
+
 	// TODO calculate usage
 	
-	// prevent from updating temperature too often:
+	// prevent updating temperature too often:
 	static clock_t next_update = 0;
 	if (time(NULL) < next_update)
 		return;
 	next_update = time(NULL) + update_interval;
 
+	// temperature:
 	if ((f = fopen(cpu.path_temperature, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_temperature);
 	fscanf(f, "%d", &(cpu.temperature));
