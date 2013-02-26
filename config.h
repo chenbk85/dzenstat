@@ -22,4 +22,5 @@ static int num_cpus = 2;
 // colours:
 static char const* colour_hl   = "FFFFFF"; // highlighted text
 static char const* colour_hlbg = "444444"; // highlighted background
+static char const* colour_err  = "FF3333"; // error strings
 

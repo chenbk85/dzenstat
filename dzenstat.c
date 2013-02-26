@@ -85,17 +85,17 @@ display(void)
 		updateDate();
 		updateNetwork();
 
-		printf("%s", cpu.display); // CPU
-		
-		printf("   ^fg(#444444)%s^fg()   ", rsep);
+		// CPU:
+		printf("%s", cpu.display);
+		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, rsep);
 
-		printf("%s", net.display); // IP
+		// IP:
+		printf("%s", net.display);
+		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, rsep);
 
-		printf("   ^fg(#444444)%s^fg()   ", rsep);
-
-		printf("%s", bat.display); // battery
-
-		printf("   ^fg(#444444)%s^fg()   ", lsep);
+		// battery:
+		printf("%s", bat.display);
+		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, lsep);
 
 		// date:
 		printf("^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm) ",
@@ -104,11 +104,11 @@ display(void)
 				date->tm_mday, icons_path);
 		printf("(^i(%s/glyph_japanese_%d.xbm))",
 				icons_path, date->tm_wday);
+		printf("   ^fg(#%s)%s^fg()^bg(#%s)   ",colour_hlbg, lfsep, colour_hlbg);
 
-		printf("   ^fg(#444444)%s^fg()^bg(#444444)   ", lfsep);
-
-		printf("^fg(#FFFFFF)%02d:%02d^fg()", date->tm_hour, date->tm_min);//time
-		
+		// time:
+		printf("^fg(#%s)%02d:%02d^fg()",
+				colour_hl, date->tm_hour, date->tm_min);
 		printf("   ^bg()");
 
 		// end & sleep:
@@ -344,8 +344,12 @@ updateNetwork(void)
 	}
 
 	// assemble output:
-	if ((i = ifup("wlan0")) >= 0)
-		sprintf(net.display, "%s: %s", net.names[i], net.ips[i]);
+	if ((i = ifup("eth0")) >= 0 || (i = ifup("wlan0")) >= 0)
+		sprintf(net.display, "%s:  ^fg(#%s)%s^fg()",
+				net.names[i], colour_hl, net.ips[i]);
+	else
+		sprintf(net.display, "^fg(#%s)no network^fg()",
+				colour_err);
 }
 
 int
