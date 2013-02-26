@@ -2,17 +2,20 @@
  */
 
 // use design capacity for calculating percentage?
-bool const use_acpi_real_capacity = false;
+static bool const use_acpi_real_capacity = false;
 
-// delay in seconds for battery/temperature update:
-int const update_interval = 10;
+// delay in seconds for battery/CPU update:
+static int const update_interval = 3;
 
 // location of battery information files (folder):
-char const* battery_path = "/sys/class/power_supply/BAT1/";
+static char const* battery_path = "/sys/class/power_supply/BAT1";
 
 // location of CPU temperature file:
-char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/device/temp1_input";
+static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/device/temp1_input";
 
 // location of icon files:
-char const* icons_path = "/home/ayekat/.config/conky/graphics/";
+static char const* icons_path = "/home/ayekat/.config/conky/graphics";
+
+// number of CPU cores:
+static int num_cpus = 2;
 

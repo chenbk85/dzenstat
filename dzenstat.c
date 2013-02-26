@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <ifaddrs.h>
+
+#define NUM_MAX_CPUS 8
 
 typedef struct {
 	char *path_charge_now, *path_charge_full, *path_charge_full_design,
@@ -23,32 +26,35 @@ typedef struct {
 typedef struct {
 	char *path_temperature, *path_usage;
 	int temperature;
-	int usage0, usage1;
+	int usage[NUM_MAX_CPUS], busy_last[NUM_MAX_CPUS], idle_last[NUM_MAX_CPUS];
 	char display[128];
 } CPU;
 
 /* function declarations */
-void die(char const* format, ...);
-void display(void);
-void init(void);
-void initBattery(void);
-void initCPU(void);
-void updateBattery(void);
-void updateColour(int percentage);
-void updateCPU(void);
-void updateDate(void);
+static void die(char const* format, ...);
+static void display(void);
+static void init(void);
+static void initBattery(void);
+static void initCPU(void);
+static void updateBattery(void);
+static void updateColour(char* str, double val);
+static void updateCPU(void);
+static void updateDate(void);
 
 /* variables */
-Battery bat;
-CPU cpu;
-struct tm *date;
-struct timespec delay;
-time_t rawtime;
+static Battery bat;
+static CPU cpu;
+static struct tm *date;
+static struct timespec delay;
+static time_t rawtime;
+
+/* seperator icons */
+static char lsep[100], lfsep[100], rsep[100], rfsep[100];
 
 /* load user configuration */
 #include "config.h"
 
-void
+static void
 die(char const *format, ...)
 {
 	va_list args;
@@ -58,7 +64,7 @@ die(char const *format, ...)
 	exit(-1);
 }
 
-void
+static void
 display(void)
 {
 	while (true) {
@@ -67,54 +73,64 @@ display(void)
 		updateDate();
 
 		// temperature:
-		printf("%d°C ", cpu.temperature);
+		printf(" %s ", cpu.display);
 
 		// battery:
-		printf("%s ", bat.display);
-		/*
-		if (!bat.discharging)
-			printf("^fg(#5577FF)%d%%^fg() ", bat.capacity);
-		else
-			printf("%d%% (%dh %dm %ds) ",  bat.capacity, bat.h,bat.m,bat.s);
-		*/
+		printf(" %s ", bat.display);
+
+		// date:
+		printf(" ^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm)",
+				date->tm_mon+1, icons_path);
+		printf(" ^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_7.xbm) ",
+				date->tm_mday, icons_path);
+		printf(" (^i(%s/glyph_japanese_%d.xbm)) ",
+				icons_path, date->tm_wday);
 
 		// time:
-		printf("^fg(#FFFFFF)%02d:%02d^fg():%02d\n",
-				date->tm_hour, date->tm_min, date->tm_sec);
+		printf(" ^fg(#FFFFFF)%02d:%02d^fg()",
+				date->tm_hour, date->tm_min);
 
+		// end & sleep:
+		printf("\n");
 		nanosleep(&delay, NULL);
 	}
 }
 
-void
+static void
 init(void)
 {
 	setvbuf(stdout, NULL, _IOLBF, 1024); // force line buffering
 	delay.tv_sec = 0;
-	delay.tv_nsec = 200000000;
+	delay.tv_nsec = 450000000; // = 100000 µs = 100 ms = 0.1s
 	initBattery();
 	initCPU();
+
+	// seperator icons:
+	sprintf(lsep, "^i(%s/glyph_2B80.xbm)", icons_path);
+	sprintf(lfsep, "%s/glyph_2B81.xbm", icons_path);
+	sprintf(rsep, "%s/glyph_2B82.xbm", icons_path);
+	sprintf(rfsep, "%s/glyph_2B83.xbm", icons_path);
 }
 
-void
+static void
 initBattery(void)
 {
-	int dirlen = strlen(battery_path)+1; // +1 for terminating null
+	int dirlen = strlen(battery_path)+2; // +2 for terminating null and slash
 	bat.path_charge_now = (char*)malloc(dirlen+strlen("charge_now"));
-	sprintf(bat.path_charge_now, "%scharge_now", battery_path);
+	sprintf(bat.path_charge_now, "%s/charge_now", battery_path);
 	bat.path_charge_full = (char*)malloc(dirlen+strlen("charge_full"));
-	sprintf(bat.path_charge_full, "%scharge_full", battery_path);
+	sprintf(bat.path_charge_full, "%s/charge_full", battery_path);
 	bat.path_charge_full_design = (char*)malloc(dirlen+strlen("charge_full_design"));
-	sprintf(bat.path_charge_full_design, "%scharge_full_design", battery_path);
+	sprintf(bat.path_charge_full_design, "%s/charge_full_design", battery_path);
 	bat.path_current_now = (char*)malloc(dirlen+strlen("current_now"));
-	sprintf(bat.path_current_now, "%scurrent_now", battery_path);
+	sprintf(bat.path_current_now, "%s/current_now", battery_path);
 	bat.path_capacity = (char*)malloc(dirlen+strlen("capacity"));
-	sprintf(bat.path_capacity, "%scapacity", battery_path);
+	sprintf(bat.path_capacity, "%s/capacity", battery_path);
 	bat.path_status = (char*)malloc(dirlen+strlen("status"));
-	sprintf(bat.path_status, "%sstatus", battery_path);
+	sprintf(bat.path_status, "%s/status", battery_path);
 }
 
-void
+static void
 initCPU(void)
 {
 	// temperature:
@@ -125,7 +141,7 @@ initCPU(void)
 	cpu.path_usage = "/proc/stat";
 }
 
-void
+static void
 updateBattery(void)
 {
 	FILE *f;
@@ -192,36 +208,58 @@ updateBattery(void)
 	bat.s = (int)(fmod((fmod(hours, 1) * 60), 1) * 60);
 
 	// assemble output:
+	char colour[7];
+	updateColour(colour, bat.capacity/100.0);
 	if (!bat.discharging)
 		sprintf(bat.display,
-				"^fg(#5577FF)%d%% ^i(%sglyph_battery_%02d.xbm)^fg()",
+				"^fg(#5577FF)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
 				bat.capacity, icons_path, bat.capacity/10*10);
-	else
-		sprintf(bat.display, "%d%% ^i(%sglyph_battery_%02d.xbm)(%dh %dm %ds)",
-				bat.capacity, icons_path, bat.capacity/10*10,
-				bat.h, bat.m, bat.s);
+	else {
+		sprintf(bat.display,
+				"^fg(#%s)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
+				colour, bat.capacity, icons_path, bat.capacity/10*10);
+		sprintf(bat.display, "%s  ^fg(#FFFFFF)%dh %dm %ds^fg()",
+				bat.display, bat.h, bat.m, bat.s);
+	}
 }
 
-void
-updateColour(int percentage)
+static void
+updateColour(char* str, double val)
 {
+	double r = 1-val*val*val;
+	double g = 1-(val-1)*(val-1)*(val-1)*(-1);
+	double b = 0.2;
+	sprintf(str, "%02X%02X%02X", (int)(r*255), (int)(g*255), (int)(b*255));
 }
 
-void
+static void
 updateCPU(void)
 {
 	FILE *f;
+	int i;
+	int busy_now, user, nice, system, idle_now;
+	int busy, idle, total;
 
-	if ((f = fopen(cpu.path_usage, "r")) == NULL)
-		die("Failed to open file: %s\n", cpu.path_usage);
-
-	// TODO calculate usage
-	
 	// prevent updating temperature too often:
 	static clock_t next_update = 0;
 	if (time(NULL) < next_update)
 		return;
 	next_update = time(NULL) + update_interval;
+
+	// CPU usage:
+	if ((f = fopen(cpu.path_usage, "r")) == NULL)
+		die("Failed to open file: %s\n", cpu.path_usage);
+	fscanf(f, "%*[^\n]"); // ignore first line
+	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++) {
+		fscanf(f, "%*s %d %d %d %d%*[^\n]", &user, &nice, &system, &idle_now);
+		busy_now = user+nice+system;
+		busy = busy_now - cpu.busy_last[i];
+		idle = idle_now - cpu.idle_last[i];
+		total = idle+busy;
+		cpu.usage[i] = (busy*1000+5)/10/total;
+		cpu.busy_last[i] = busy_now;
+		cpu.idle_last[i] = idle_now;
+	}
 
 	// temperature:
 	if ((f = fopen(cpu.path_temperature, "r")) == NULL)
@@ -233,13 +271,19 @@ updateCPU(void)
 	}
 	fclose(f);
 	cpu.temperature /= 1000;
+
+	// assemble display:
+	sprintf(cpu.display, "^fg(#FFFFFF)");
+	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++)
+		sprintf(cpu.display, "%s[%d%%] ", cpu.display, cpu.usage[i]);
+	sprintf(cpu.display, "%s^fg()%d°C", cpu.display, cpu.temperature);
 }
 
-void
+static void
 updateDate(void)
 {
 	time(&rawtime);
-	date = gmtime(&rawtime);
+	date = localtime(&rawtime);
 }
 
 int
