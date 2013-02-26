@@ -19,3 +19,7 @@ static char const* icons_path = "/home/ayekat/.config/conky/graphics";
 // number of CPU cores:
 static int num_cpus = 2;
 
+// colours:
+static char const* colour_hl   = "FFFFFF"; // highlighted text
+static char const* colour_hlbg = "444444"; // highlighted background
+

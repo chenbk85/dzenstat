@@ -10,9 +10,12 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <sys/types.h>
 #include <ifaddrs.h>
+#include <arpa/inet.h>
 
 #define NUM_MAX_CPUS 8
+#define NUM_MAX_IFS 8
 
 typedef struct {
 	char *path_charge_now, *path_charge_full, *path_charge_full_design,
@@ -31,16 +34,18 @@ typedef struct {
 } CPU;
 
 typedef struct {
+	char* names[NUM_MAX_IFS];
+	char* ips[NUM_MAX_IFS];
 	char display[128];
 } Network;
 
 /* function declarations */
 static void die(char const* format, ...);
 static void display(void);
+static int ifup(char const* iface);
 static void init(void);
 static void initBattery(void);
 static void initCPU(void);
-static void initNetwork(void);
 static void updateBattery(void);
 static void updateColour(char* str, double val);
 static void updateCPU(void);
@@ -78,33 +83,48 @@ display(void)
 		updateBattery();
 		updateCPU();
 		updateDate();
+		updateNetwork();
 
-		// CPU:
-		printf("%s  ^fg(#444444)%s^fg()  ", cpu.display, rsep);
+		printf("%s", cpu.display); // CPU
+		
+		printf("   ^fg(#444444)%s^fg()   ", rsep);
 
-		// IP:
-		printf("%s  ^fg(#444444)%s^fg()  ", net.display, rsep);
+		printf("%s", net.display); // IP
 
-		// battery:
-		printf("%s  ^fg(#444444)%s^fg()  ", bat.display, lsep);
+		printf("   ^fg(#444444)%s^fg()   ", rsep);
+
+		printf("%s", bat.display); // battery
+
+		printf("   ^fg(#444444)%s^fg()   ", lsep);
 
 		// date:
-		printf(" ^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm)",
+		printf("^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm) ",
 				date->tm_mon+1, icons_path);
-		printf(" ^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_7.xbm) ",
+		printf("^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_7.xbm) ",
 				date->tm_mday, icons_path);
-		printf("(^i(%s/glyph_japanese_%d.xbm)) ",
+		printf("(^i(%s/glyph_japanese_%d.xbm))",
 				icons_path, date->tm_wday);
-		printf(" ^fg(#444444)%s^fg()", lfsep);
 
-		// time:
-		printf("^bg(#444444)  ^fg(#FFFFFF)%02d:%02d^fg()  ^bg()",
-				date->tm_hour, date->tm_min);
+		printf("   ^fg(#444444)%s^fg()^bg(#444444)   ", lfsep);
+
+		printf("^fg(#FFFFFF)%02d:%02d^fg()", date->tm_hour, date->tm_min);//time
+		
+		printf("   ^bg()");
 
 		// end & sleep:
 		printf("\n");
 		nanosleep(&delay, NULL);
 	}
+}
+
+static int
+ifup(char const* iface)
+{
+	int i;
+	for (i = 0; i < NUM_MAX_IFS && net.names[i] != NULL; ++i)
+		if (strcmp(net.names[i], iface) == 0)
+			return i;
+	return -1;
 }
 
 static void
@@ -153,12 +173,6 @@ initCPU(void)
 }
 
 static void
-initNetwork(void)
-{
-	// TODO
-}
-
-static void
 updateBattery(void)
 {
 	FILE *f;
@@ -198,38 +212,37 @@ updateBattery(void)
 	}
 
 	// prevent recalculating time if charging (not displayed):
-	if (!bat.discharging)
-		return;
-
-	// time left:
-	if ((f = fopen(bat.path_charge_now, "r")) == NULL)
-		die("Failed to open file: %s\n", bat.path_charge_now);
-	fscanf(f, "%d", &(bat.charge_now));
-	if (ferror(f)) {
+	if (bat.discharging) {
+		// time left:
+		if ((f = fopen(bat.path_charge_now, "r")) == NULL)
+			die("Failed to open file: %s\n", bat.path_charge_now);
+		fscanf(f, "%d", &(bat.charge_now));
+		if (ferror(f)) {
+			fclose(f);
+			die("Failed to read file: %s\n", bat.path_charge_now);
+		}
 		fclose(f);
-		die("Failed to read file: %s\n", bat.path_charge_now);
-	}
-	fclose(f);
-	if ((f = fopen(bat.path_current_now, "r")) == NULL)
-		die("Failed to open file: %s\n", bat.path_current_now);
-	fscanf(f, "%d", &bat.current_now);
-	if (ferror(f)) {
+		if ((f = fopen(bat.path_current_now, "r")) == NULL)
+			die("Failed to open file: %s\n", bat.path_current_now);
+		fscanf(f, "%d", &bat.current_now);
+		if (ferror(f)) {
+			fclose(f);
+			die("Failed to read file: %s\n", bat.path_current_now);
+		}
 		fclose(f);
-		die("Failed to read file: %s\n", bat.path_current_now);
-	}
-	fclose(f);
 
-	double hours = (double)bat.charge_now / (double)bat.current_now;
-	bat.h = (int)hours;
-	bat.m = (int)(fmod(hours, 1) * 60);
-	bat.s = (int)(fmod((fmod(hours, 1) * 60), 1) * 60);
+		double hours = (double)bat.charge_now / (double)bat.current_now;
+		bat.h = (int)hours;
+		bat.m = (int)(fmod(hours, 1) * 60);
+		bat.s = (int)(fmod((fmod(hours, 1) * 60), 1) * 60);
+	}
 
 	// assemble output:
 	char colour[7];
 	updateColour(colour, bat.capacity/100.0);
 	if (!bat.discharging)
 		sprintf(bat.display,
-				"^fg(#5577FF)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
+				"^fg(#4499CC)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
 				bat.capacity, icons_path, bat.capacity/10*10);
 	else {
 		sprintf(bat.display,
@@ -252,21 +265,22 @@ updateColour(char* str, double val)
 static void
 updateCPU(void)
 {
-	FILE *f;
-	int i;
-	int busy_now, user, nice, system, idle_now;
-	int busy, idle, total;
-
-	// prevent updating temperature too often:
+	// prevent from updating too often:
 	static clock_t next_update = 0;
 	if (time(NULL) < next_update)
 		return;
 	next_update = time(NULL) + update_interval;
 
+	int i;
+
 	// CPU usage:
+	FILE *f;
 	if ((f = fopen(cpu.path_usage, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_usage);
 	fscanf(f, "%*[^\n]"); // ignore first line
+
+	int busy_now, user, nice, system, idle_now;
+	int busy, idle, total;
 	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++) {
 		fscanf(f, "%*s %d %d %d %d%*[^\n]", &user, &nice, &system, &idle_now);
 		busy_now = user+nice+system;
@@ -289,7 +303,7 @@ updateCPU(void)
 	fclose(f);
 	cpu.temperature /= 1000;
 
-	// assemble display:
+	// assemble output:
 	sprintf(cpu.display, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)", icons_path);
 	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++)
 		sprintf(cpu.display, "%s[%d%%] ", cpu.display, cpu.usage[i]);
@@ -306,7 +320,32 @@ updateDate(void)
 static void
 updateNetwork(void)
 {
-	// TODO
+	// prevent from updating too often:
+	static clock_t next_update = 0;
+	if (time(NULL) < next_update)
+		return;
+	next_update = time(NULL) + update_interval;
+
+	// get list of interfaces:
+	struct ifaddrs* ifas;
+	struct ifaddrs* ifa;
+	getifaddrs(&ifas);
+	int i = 0;
+	for (ifa = ifas; ifa != NULL; ifa = ifa->ifa_next) {
+		// if it's IPv4:
+		if (ifa->ifa_addr->sa_family == AF_INET) {
+			net.ips[i] = (char*)malloc(INET_ADDRSTRLEN);
+			net.names[i] = (char*)malloc(strlen(ifa->ifa_name)+1);
+			inet_ntop(AF_INET, &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr,
+					net.ips[i], INET_ADDRSTRLEN);
+			sprintf(net.names[i], "%s", ifa->ifa_name);
+			i++;
+		}
+	}
+
+	// assemble output:
+	if ((i = ifup("wlan0")) >= 0)
+		sprintf(net.display, "%s: %s", net.names[i], net.ips[i]);
 }
 
 int
