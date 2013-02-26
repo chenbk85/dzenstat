@@ -30,20 +30,27 @@ typedef struct {
 	char display[128];
 } CPU;
 
+typedef struct {
+	char display[128];
+} Network;
+
 /* function declarations */
 static void die(char const* format, ...);
 static void display(void);
 static void init(void);
 static void initBattery(void);
 static void initCPU(void);
+static void initNetwork(void);
 static void updateBattery(void);
 static void updateColour(char* str, double val);
 static void updateCPU(void);
 static void updateDate(void);
+static void updateNetwork(void);
 
 /* variables */
 static Battery bat;
 static CPU cpu;
+static Network net;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
@@ -72,22 +79,26 @@ display(void)
 		updateCPU();
 		updateDate();
 
-		// temperature:
-		printf(" %s ", cpu.display);
+		// CPU:
+		printf("%s  ^fg(#444444)%s^fg()  ", cpu.display, rsep);
+
+		// IP:
+		printf("%s  ^fg(#444444)%s^fg()  ", net.display, rsep);
 
 		// battery:
-		printf(" %s ", bat.display);
+		printf("%s  ^fg(#444444)%s^fg()  ", bat.display, lsep);
 
 		// date:
 		printf(" ^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm)",
 				date->tm_mon+1, icons_path);
 		printf(" ^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_7.xbm) ",
 				date->tm_mday, icons_path);
-		printf(" (^i(%s/glyph_japanese_%d.xbm)) ",
+		printf("(^i(%s/glyph_japanese_%d.xbm)) ",
 				icons_path, date->tm_wday);
+		printf(" ^fg(#444444)%s^fg()", lfsep);
 
 		// time:
-		printf(" ^fg(#FFFFFF)%02d:%02d^fg()",
+		printf("^bg(#444444)  ^fg(#FFFFFF)%02d:%02d^fg()  ^bg()",
 				date->tm_hour, date->tm_min);
 
 		// end & sleep:
@@ -106,10 +117,10 @@ init(void)
 	initCPU();
 
 	// seperator icons:
-	sprintf(lsep, "^i(%s/glyph_2B80.xbm)", icons_path);
-	sprintf(lfsep, "%s/glyph_2B81.xbm", icons_path);
-	sprintf(rsep, "%s/glyph_2B82.xbm", icons_path);
-	sprintf(rfsep, "%s/glyph_2B83.xbm", icons_path);
+	sprintf(rfsep, "^i(%s/glyph_2B80.xbm)", icons_path);
+	sprintf(rsep, "^i(%s/glyph_2B81.xbm)", icons_path);
+	sprintf(lfsep, "^i(%s/glyph_2B82.xbm)", icons_path);
+	sprintf(lsep, "^i(%s/glyph_2B83.xbm)", icons_path);
 }
 
 static void
@@ -139,6 +150,12 @@ initCPU(void)
 
 	// usage:
 	cpu.path_usage = "/proc/stat";
+}
+
+static void
+initNetwork(void)
+{
+	// TODO
 }
 
 static void
@@ -273,10 +290,10 @@ updateCPU(void)
 	cpu.temperature /= 1000;
 
 	// assemble display:
-	sprintf(cpu.display, "^fg(#FFFFFF)");
+	sprintf(cpu.display, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)", icons_path);
 	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++)
 		sprintf(cpu.display, "%s[%d%%] ", cpu.display, cpu.usage[i]);
-	sprintf(cpu.display, "%s^fg()%d°C", cpu.display, cpu.temperature);
+	sprintf(cpu.display, "%s^fg() %d°C", cpu.display, cpu.temperature);
 }
 
 static void
@@ -284,6 +301,12 @@ updateDate(void)
 {
 	time(&rawtime);
 	date = localtime(&rawtime);
+}
+
+static void
+updateNetwork(void)
+{
+	// TODO
 }
 
 int
