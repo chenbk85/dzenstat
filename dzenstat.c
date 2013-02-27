@@ -105,23 +105,23 @@ display(void)
 
 		// CPU:
 		printf("%s", cpu.display);
-		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, rsep);
+		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// IP:
 		printf("%s", net.display);
-		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, rsep);
+		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// MPD:
 		printf("%s", audio.display_mpd);
-		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, lsep);
+		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// battery:
 		printf("%s", bat.display);
-		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, lsep);
+		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// volume:
 		printf("%s", audio.display_vol);
-		printf("   ^fg(#%s)%s^fg()   ", colour_hlbg, lsep);
+		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// date:
 		printf("^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm) ",
@@ -130,7 +130,7 @@ display(void)
 				date->tm_mday, icons_path);
 		printf("(^i(%s/glyph_japanese_%d.xbm))",
 				icons_path, date->tm_wday);
-		printf("   ^fg(#%s)%s^fg()^bg(#%s)   ",colour_hlbg, lfsep, colour_hlbg);
+		printf("  ^fg(#%s)%s^fg()^bg(#%s)   ",colour_hlbg, lfsep, colour_hlbg);
 
 		// time:
 		printf("^fg(#%s)%02d:%02d^fg()",
@@ -207,6 +207,12 @@ initCPU(void)
 static void
 updateAudio(void)
 {
+	// prevent from updating too often:
+	static clock_t next_update = 0;
+	if (time(NULL) < next_update)
+		return;
+	next_update = time(NULL) + update_interval;
+
 	// connection:
 	audio.conn = mpd_connection_new(NULL, 0, 0); // default host, port, timeout
 	if (mpd_connection_get_error(audio.conn) != MPD_ERROR_SUCCESS)
@@ -251,13 +257,13 @@ updateAudio(void)
 static void
 updateBattery(void)
 {
-	FILE *f;
-
 	// prevent from updating too often:
 	static clock_t next_update = 0;
 	if (time(NULL) < next_update)
 		return;
 	next_update = time(NULL) + update_interval;
+
+	FILE *f;
 
 	// battery state:
 	if ((f = fopen(bat.path_status, "r")) == NULL)
@@ -349,7 +355,7 @@ updateCPU(void)
 
 	int i;
 
-	// CPU usage:
+	// CPU usage (TODO the values are somewhat wrong, figure out why):
 	FILE *f;
 	if ((f = fopen(cpu.path_usage, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_usage);
@@ -380,10 +386,15 @@ updateCPU(void)
 	cpu.temperature /= 1000;
 
 	// assemble output:
+	char w[13], e[13];
+	sprintf(w, "^fg(#%s)", colour_warn);
+	sprintf(e, "^fg(#%s)", colour_err);
 	sprintf(cpu.display, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)", icons_path);
 	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++)
 		sprintf(cpu.display, "%s[%d%%] ", cpu.display, cpu.usage[i]);
-	sprintf(cpu.display, "%s^fg() %d°C", cpu.display, cpu.temperature);
+	sprintf(cpu.display, "%s^fg() %s%d%s°C", cpu.display,
+			cpu.temperature>=temp_crit ? e : cpu.temperature>=temp_high ? w:"",
+			cpu.temperature, cpu.temperature>=temp_high ? "^fg()" : "");
 }
 
 static void
@@ -402,11 +413,14 @@ updateNetwork(void)
 		return;
 	next_update = time(NULL) + update_interval;
 
+	FILE* f;
+	int i, q;
+	char c[7];
+
 	// get list of interfaces:
 	struct ifaddrs* ifas;
 	struct ifaddrs* ifa;
 	getifaddrs(&ifas);
-	int i = 0;
 	for (ifa = ifas; ifa != NULL; ifa = ifa->ifa_next) {
 		// if it's IPv4:
 		if (ifa->ifa_addr->sa_family == AF_INET) {
@@ -419,11 +433,22 @@ updateNetwork(void)
 		}
 	}
 
-	// assemble output:
-	if ((i = ifup("eth0")) >= 0 || (i = ifup("wlan0")) >= 0)
-		sprintf(net.display, "%s:  ^fg(#%s)%s^fg()",
+	// assemble output (wlan):
+	if ((i = ifup("wlan0")) >= 0) {
+		if ((f = fopen("/proc/net/wireless", "r")) == NULL)
+			die("Failed to open file: /proc/net/wireless\n");
+		fscanf(f, "%*[^\n]\n%*[^\n]%*s %*d %d.%*s", &q);
+		updateColour(c, q/100.0);
+		sprintf(net.display,
+				"^fg(#%s)^i(%s/glyph_wifi_%d.xbm)^fg()  ^fg(#%s)%s^fg()",
+				c, icons_path, (q-1)/20, colour_hl, net.ips[i]);
+	}
+
+	// assemble output (eth):
+	else if ((i = ifup("eth0")) >= 0) {
+		sprintf(net.display, "^i(%s/glyph_eth.xbm)  ^fg(#%s)%s^fg()",
 				net.names[i], colour_hl, net.ips[i]);
-	else
+	} else
 		sprintf(net.display, "^fg(#%s)no network^fg()", colour_err);
 }
 

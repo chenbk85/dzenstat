@@ -17,10 +17,16 @@ static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/device/temp1_
 static char const* icons_path = "/home/ayekat/.config/conky/graphics";
 
 // number of CPU cores:
-static int num_cpus = 2;
+static int const num_cpus = 2;
+
+// temperature thresholds (for highlighting with colours):
+static int const temp_high = 85;
+static int const temp_crit = 95;
 
 // colours:
 static char const* colour_hl   = "FFFFFF"; // highlighted text
 static char const* colour_hlbg = "444444"; // highlighted background
+static char const* colour_sep  = "555555"; // seperator colour
 static char const* colour_err  = "FF3333"; // error strings
+static char const* colour_warn = "EEEE33"; // warning strings
 
