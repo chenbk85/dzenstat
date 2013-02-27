@@ -18,6 +18,9 @@ have a screenshot!
 
 ![screenshot](http://ayekat.ch/img/host/screen_dzenstat.png)
 
+above: conky | dzen2
+below: dzenstat | dzen2
+
 
 configure & build
 -----------------
