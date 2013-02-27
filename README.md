@@ -13,6 +13,12 @@ So to use dzenstat, you may run this command for example:
 See the dzen2 page for information about its options.
 
 
+have a screenshot!
+------------------
+
+![screenshot](http://ayekat.ch/img/host/screen_dzenstat.png)
+
+
 configure & build
 -----------------
 
