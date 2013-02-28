@@ -13,9 +13,6 @@ static char const* battery_path = "/sys/class/power_supply/BAT1";
 // location of CPU temperature file:
 static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/device/temp1_input";
 
-// location of icon files:
-static char const* icons_path = "/home/ayekat/.config/conky/graphics";
-
 // number of CPU cores:
 static int const num_cpus = 2;
 

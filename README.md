@@ -2,24 +2,27 @@ ayekat/dzenstat README
 ======================
 
 
-*dzenstat* is a simple monitor that prints system information out to the console.
-It is meant to be used in combination with
+*dzenstat* is a simple monitor that prints system information out to the
+console. It is meant to be used in combination with
 <a href="http://github.com/robm/dzen/">dzen2</a>.
 
-So to use dzenstat, you may run this command for example:
+Please note that this program is still in early development, and thus it is not
+meant to be used. And even as it moves on, it's just meant to work for my needs.
 
-	dzenstat | dzen2 -ta r
-
-See the dzen2 page for information about its options.
+But of course you may use the source code to build your own little tools.
 
 
 have a screenshot!
 ------------------
 
+Just to give you an impression what it should look like - and what it currently
+looks like.
+
 ![screenshot](http://ayekat.ch/img/host/screen_dzenstat.png)
 
-above: conky | dzen2
-below: dzenstat | dzen2
+above: **conky**
+
+below: **dzenstat**
 
 
 configure & build
@@ -36,14 +39,24 @@ To build, simply compile with
 This should create a binary <code>dzenstat</code> in the same directory.
 
 
-usability
----------
+run
+---
 
-As this program is still in early development, it is not yet meant to be used.
-And even as it moves on, it's just meant to work for my needs. But you may of
-course use the source code to build your own little tools.
+As mentioned above, dzenstat is meant to be used in combination with dzen2:
 
-And anyway: even I don't use it yet.
+	dzenstat | dzen2 -ta r -w 1000
+
+This will put a dzenstat bar on the upper right corner of your screen 1000
+pixels wide.
+
+Run <code>dzen2 --help</code> or visit the dzen2 page for information about its
+options.
+
+Please note that currently there is no way to install dzenstat on the system, so
+dzenstat will assume that you invoke it from the very directory the *icons*
+folder lies in. This is crucial for correctly displaying the icons.
+
+A <code>PKGBUILD</code> is in on the way!
 
 
 what's wrong with conky?
@@ -56,7 +69,8 @@ Yet if I have lines like these
 
 	${execi 5 sensors | grep temp1 | awk '{print $2}' | tail -n 1}
 
-in <code>.conkyrc</code> on my 1GHz netbook, the application footprint still
-starts to matter. That's why I thought I could write my own 'script' in C; it's
-a funny way to learn a bit about the operating system.
+in <code>.conkyrc</code> on a 1GHz netbook, I can't simply ignore the
+application footprint. That's why I came up with the idea to write my own
+'script' in C; it's a fun way to learn something about C and the operating
+system.
 

@@ -76,6 +76,7 @@ static Network net;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
+static char* icons_path;
 
 /* seperator icons */
 static char lsep[100], lfsep[100], rsep[100], rfsep[100];
@@ -163,7 +164,10 @@ init(void)
 	initBattery();
 	initCPU();
 
-	// seperator icons:
+	// icons:
+	icons_path = (char*)malloc(strlen(getenv("PWD"))+strlen("/icons")+1);
+	sprintf(icons_path, "%s/icons", getenv("PWD"));
+
 	sprintf(rfsep, "^i(%s/glyph_2B80.xbm)", icons_path);
 	sprintf(rsep, "^i(%s/glyph_2B81.xbm)", icons_path);
 	sprintf(lfsep, "^i(%s/glyph_2B82.xbm)", icons_path);
@@ -433,8 +437,13 @@ updateNetwork(void)
 		}
 	}
 
+	// assemble output (eth):
+	if ((i = ifup("eth0")) >= 0) {
+		sprintf(net.display, "^i(%s/glyph_eth.xbm)  ^fg(#%s)%s^fg()",
+				net.names[i], colour_hl, net.ips[i]);
+	}
 	// assemble output (wlan):
-	if ((i = ifup("wlan0")) >= 0) {
+	else if ((i = ifup("wlan0")) >= 0) {
 		if ((f = fopen("/proc/net/wireless", "r")) == NULL)
 			die("Failed to open file: /proc/net/wireless\n");
 		fscanf(f, "%*[^\n]\n%*[^\n]%*s %*d %d.%*s", &q);
@@ -442,19 +451,15 @@ updateNetwork(void)
 		sprintf(net.display,
 				"^fg(#%s)^i(%s/glyph_wifi_%d.xbm)^fg()  ^fg(#%s)%s^fg()",
 				c, icons_path, (q-1)/20, colour_hl, net.ips[i]);
-	}
-
-	// assemble output (eth):
-	else if ((i = ifup("eth0")) >= 0) {
-		sprintf(net.display, "^i(%s/glyph_eth.xbm)  ^fg(#%s)%s^fg()",
-				net.names[i], colour_hl, net.ips[i]);
+	// assemble output (none or other):
 	} else
-		sprintf(net.display, "^fg(#%s)no network^fg()", colour_err);
+		sprintf(net.display, "no network");
 }
 
 int
 main(int argc, char **argv)
 {
+	fprintf(stderr, argv[0]);
 	init();
 	display();
 	return 0;
