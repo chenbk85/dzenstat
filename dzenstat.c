@@ -60,7 +60,6 @@ static void init(void);
 static void initBattery(void);
 static void initCPU(void);
 static void initSound(void);
-static bool sleeping(void);
 static void updateBattery(void);
 static void updateColour(char* str, double val);
 static void updateCPU(void);
@@ -83,6 +82,12 @@ static char lsep[100], lfsep[100], rsep[100], rfsep[100];
 
 /* load user configuration */
 #include "config.h"
+
+static void
+clean(void)
+{
+	// TODO
+}
 
 static void
 die(char const *format, ...)
@@ -251,27 +256,18 @@ initSound(void)
 
 	// get maximum volume:
 	sscanf(buf, "%*s %*s ofs=%x%*[^\n]\n", &snd.max);
-	printf("max: %d ", snd.max);
 	snd.line++; // we assume that current volume is on the next line
 	fclose(f);
 
-}
-
-static bool
-sleeping(void)
-{
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return true;
-	next_update = time(NULL) + update_interval;
-	return false;
 }
 
 static void
 updateBattery(void)
 {
 	// prevent from updating too often:
-	if (sleeping()) return;
+	static clock_t next_update = 0;
+	if (time(NULL) < next_update) return;
+	next_update = time(NULL) + update_interval;
 
 	FILE *f;
 
@@ -358,7 +354,9 @@ static void
 updateCPU(void)
 {
 	// prevent from updating too often:
-	if (sleeping()) return;
+	static clock_t next_update = 0;
+	if (time(NULL) < next_update) return;
+	next_update = time(NULL) + update_interval;
 
 	int i;
 	int busy_now, user, nice, system, idle_now;
@@ -414,7 +412,9 @@ static void
 updateNetwork(void)
 {
 	// prevent from updating too often:
-	if (sleeping()) return;
+	static clock_t next_update = 0;
+	if (time(NULL) < next_update) return;
+	next_update = time(NULL) + update_interval;
 
 	FILE* f;
 	int i, q;
@@ -487,7 +487,6 @@ updateSound(void)
 int
 main(int argc, char **argv)
 {
-	fprintf(stderr, argv[0]);
 	init();
 	display();
 	return 0;
