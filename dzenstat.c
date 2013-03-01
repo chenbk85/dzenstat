@@ -13,20 +13,14 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
-#include <mpd/client.h>
-#include <mpd/status.h>
-#include <mpd/entity.h>
-#include <mpd/search.h>
-#include <mpd/tag.h>
+#include <regex.h>
 
-#define NUM_MAX_CPUS 8
-#define NUM_MAX_IFS 8
+#define NUM_MAX_CORES 8 /* maximum number of CPUs */
+#define NUM_MAX_IFS 8  /* maximum number of interfaces */
 
-typedef struct {
-	int vol;
-	bool mute;
-	char display[128];
-} Sound;
+#define C_RED    "FF3333"
+#define C_GREEN  "33FF33"
+#define C_YELLOW "EEEE33"
 
 typedef struct {
 	char *path_charge_now, *path_charge_full, *path_charge_full_design,
@@ -40,7 +34,7 @@ typedef struct {
 typedef struct {
 	char *path_temperature, *path_usage;
 	int temperature;
-	int usage[NUM_MAX_CPUS], busy_last[NUM_MAX_CPUS], idle_last[NUM_MAX_CPUS];
+	int usage[NUM_MAX_CORES], busy_last[NUM_MAX_CORES], idle_last[NUM_MAX_CORES];
 	char display[128];
 } CPU;
 
@@ -50,7 +44,15 @@ typedef struct {
 	char display[128];
 } Network;
 
+typedef struct {
+	int max, vol, line;
+	bool mute;
+	char display[128];
+	char const* path;
+} Sound;
+
 /* function declarations */
+static void clean(void);
 static void die(char const* format, ...);
 static void display(void);
 static int ifup(char const* iface);
@@ -58,6 +60,7 @@ static void init(void);
 static void initBattery(void);
 static void initCPU(void);
 static void initSound(void);
+static bool sleeping(void);
 static void updateBattery(void);
 static void updateColour(char* str, double val);
 static void updateCPU(void);
@@ -118,7 +121,7 @@ display(void)
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// volume:
-		printf("%s", snd);
+		printf("%s", snd.display);
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// date:
@@ -203,16 +206,72 @@ initCPU(void)
 static void
 initSound(void)
 {
+	snd.path = "/proc/asound/SB/codec#0";
+	regex_t regex[3];
+	char const* regex_string[3] = {
+		"^Node 0x[[:xdigit:]]+ \\[Audio Output\\]",
+		"^Amp-Out caps:",
+		"^Amp-Out vals:" };
+	char buf[128];
+	int i;
+
+	// compile first regex for finding right node:
+	for (i = 0; i < 3; ++i)
+		if (regcomp(&regex[i], regex_string[i], REG_EXTENDED))
+			die("Could not compile regex: %s\n", regex_string[i]);
+
+	// open file from where we read lines:
+	FILE* f;
+	if ((f = fopen(snd.path, "r")) == NULL)
+		die("Could not open file: %s\n", snd.path);
+
+	// find line with relevant information:
+	int reti;
+	for (i = 0; i < 2; ++i) {
+		while (true) {
+			if (fscanf(f, "%[^\n]\n", buf) < 0) {
+				die("Reached end of file: %s\n", snd.path);
+				break;
+			}
+			reti = regexec(&regex[i], buf, 0, NULL, 0);
+			if (!reti) break;
+			else if (reti == REG_NOMATCH) {
+				++snd.line;
+				continue;
+			} else {
+				regerror(reti, &regex[i], buf, sizeof(buf));
+				die("Regex match failed: %s\n", buf);
+			}
+		};
+	}
+	// we're done with regex:
+	regfree(&regex[0]);
+	regfree(&regex[1]);
+	regfree(&regex[2]);
+
+	// get maximum volume:
+	sscanf(buf, "%*s %*s ofs=%x%*[^\n]\n", &snd.max);
+	printf("max: %d ", snd.max);
+	snd.line++; // we assume that current volume is on the next line
+	fclose(f);
+
+}
+
+static bool
+sleeping(void)
+{
+	static clock_t next_update = 0;
+	if (time(NULL) < next_update)
+		return true;
+	next_update = time(NULL) + update_interval;
+	return false;
 }
 
 static void
 updateBattery(void)
 {
 	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return;
-	next_update = time(NULL) + update_interval;
+	if (sleeping()) return;
 
 	FILE *f;
 
@@ -299,22 +358,18 @@ static void
 updateCPU(void)
 {
 	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return;
-	next_update = time(NULL) + update_interval;
+	if (sleeping()) return;
 
 	int i;
+	int busy_now, user, nice, system, idle_now;
+	int busy, idle, total;
 
-	// CPU usage (TODO the values are somewhat wrong, figure out why):
+	// usage (TODO the values are somewhat wrong, figure out why):
 	FILE *f;
 	if ((f = fopen(cpu.path_usage, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_usage);
 	fscanf(f, "%*[^\n]"); // ignore first line
-
-	int busy_now, user, nice, system, idle_now;
-	int busy, idle, total;
-	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++) {
+	for (i = 0; i < num_cpus && i < NUM_MAX_CORES; i++) {
 		fscanf(f, "%*s %d %d %d %d%*[^\n]", &user, &nice, &system, &idle_now);
 		busy_now = user+nice+system;
 		busy = busy_now - cpu.busy_last[i];
@@ -341,7 +396,7 @@ updateCPU(void)
 	sprintf(w, "^fg(#%s)", colour_warn);
 	sprintf(e, "^fg(#%s)", colour_err);
 	sprintf(cpu.display, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)", icons_path);
-	for (i = 0; i < num_cpus && i < NUM_MAX_CPUS; i++)
+	for (i = 0; i < num_cpus && i < NUM_MAX_CORES; i++)
 		sprintf(cpu.display, "%s[%d%%] ", cpu.display, cpu.usage[i]);
 	sprintf(cpu.display, "%s^fg() %s%d%s°C", cpu.display,
 			cpu.temperature>=temp_crit ? e : cpu.temperature>=temp_high ? w:"",
@@ -359,10 +414,7 @@ static void
 updateNetwork(void)
 {
 	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return;
-	next_update = time(NULL) + update_interval;
+	if (sleeping()) return;
 
 	FILE* f;
 	int i, q;
@@ -406,6 +458,30 @@ updateNetwork(void)
 static void
 updateSound(void)
 {
+	FILE* f;
+	int i, l, r;
+
+	// open file from where we read lines:
+	if ((f = fopen(snd.path, "r")) == NULL)
+		die("Could not open file: %s\n", snd.path);
+
+	// read relevant line into buffer (ignoring preceding ones):
+	for (i = 0; i <= snd.line; ++i)
+		fscanf(f, "%*[^\n]\n");
+	fscanf(f, "%*s %*s [%x %x", &l, &r);
+	fclose(f);
+
+	// get volume:
+	snd.mute = l&0x80 && r&&0x80;
+	snd.vol = ((snd.mute?l-0x80:l)+(snd.mute?r-0x80:r))*50/snd.max;
+
+	// update output:
+	if (snd.mute)
+		sprintf(snd.display, "^fg(#%s)^i(%s/volume_m.xbm)^fg() [%d%%]",
+				C_RED, icons_path, snd.vol);
+	else
+		sprintf(snd.display, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)[%d%%]^fg()",
+				C_GREEN, icons_path, snd.vol/34, colour_hl, snd.vol);
 }
 
 int
