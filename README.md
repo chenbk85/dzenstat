@@ -65,12 +65,11 @@ what's wrong with conky?
 Nothing is wrong with conky. It's a general-purpose program that is invaluable
 for displaying various kinds of system information, in a easy way.
 
-Yet if I have lines like these
+Yet if my <code>.conkyrc</code> contains lines like
 
 	${execi 5 sensors | grep temp1 | awk '{print $2}' | tail -n 1}
 
-in <code>.conkyrc</code> on a 1GHz netbook, I can't simply ignore the
-application footprint. That's why I came up with the idea to write my own
-'script' in C; it's a fun way to learn something about C and the operating
-system.
+on a 1GHz netbook, I can't simply ignore the application footprint. That's why I
+came up with the idea to write my own 'script' in C; it's a fun way to learn
+something about C and the operating system.
 

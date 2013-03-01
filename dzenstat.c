@@ -23,13 +23,10 @@
 #define NUM_MAX_IFS 8
 
 typedef struct {
-	struct mpd_connection* conn;
-	struct mpd_status* stat;
-	struct mpd_song* song;
 	int vol;
-	char artist[128], title[128];
-	char display_mpd[128], display_vol[128];
-} Audio;
+	bool mute;
+	char display[128];
+} Sound;
 
 typedef struct {
 	char *path_charge_now, *path_charge_full, *path_charge_full_design,
@@ -58,21 +55,21 @@ static void die(char const* format, ...);
 static void display(void);
 static int ifup(char const* iface);
 static void init(void);
-static void initAudio(void);
 static void initBattery(void);
 static void initCPU(void);
-static void updateAudio(void);
+static void initSound(void);
 static void updateBattery(void);
 static void updateColour(char* str, double val);
 static void updateCPU(void);
 static void updateDate(void);
 static void updateNetwork(void);
+static void updateSound(void);
 
 /* variables */
-static Audio audio;
 static Battery bat;
 static CPU cpu;
 static Network net;
+static Sound snd;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
@@ -98,11 +95,11 @@ static void
 display(void)
 {
 	while (true) {
-		updateAudio();
 		updateBattery();
 		updateCPU();
 		updateDate();
 		updateNetwork();
+		updateSound();
 
 		// CPU:
 		printf("%s", cpu.display);
@@ -113,7 +110,7 @@ display(void)
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// MPD:
-		printf("%s", audio.display_mpd);
+		// TODO
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// battery:
@@ -121,7 +118,7 @@ display(void)
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// volume:
-		printf("%s", audio.display_vol);
+		printf("%s", snd);
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// date:
@@ -160,9 +157,9 @@ init(void)
 	setvbuf(stdout, NULL, _IOLBF, 1024); // force line buffering
 	delay.tv_sec = 0;
 	delay.tv_nsec = 450000000; // = 100000 µs = 100 ms = 0.1s
-	initAudio();
 	initBattery();
 	initCPU();
+	initSound();
 
 	// icons:
 	icons_path = (char*)malloc(strlen(getenv("PWD"))+strlen("/icons")+1);
@@ -172,11 +169,6 @@ init(void)
 	sprintf(rsep, "^i(%s/glyph_2B81.xbm)", icons_path);
 	sprintf(lfsep, "^i(%s/glyph_2B82.xbm)", icons_path);
 	sprintf(lsep, "^i(%s/glyph_2B83.xbm)", icons_path);
-}
-
-static void
-initAudio(void)
-{
 }
 
 static void
@@ -209,53 +201,8 @@ initCPU(void)
 }
 
 static void
-updateAudio(void)
+initSound(void)
 {
-	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return;
-	next_update = time(NULL) + update_interval;
-
-	// connection:
-	audio.conn = mpd_connection_new(NULL, 0, 0); // default host, port, timeout
-	if (mpd_connection_get_error(audio.conn) != MPD_ERROR_SUCCESS)
-		die ("failed to connect to MPD: %s\n",
-				mpd_connection_get_error_message(audio.conn));
-
-	// playlist:
-	mpd_command_list_begin(audio.conn, true);
-	mpd_send_status(audio.conn);
-	mpd_send_current_song(audio.conn);
-	mpd_command_list_end(audio.conn);
-
-	// update status:
-	audio.stat = mpd_recv_status(audio.conn);
-	if (audio.stat == NULL) {
-		fprintf(stderr, "failed to get MPD status: %s\n",
-				mpd_connection_get_error_message(audio.conn));
-		mpd_connection_free(audio.conn);
-		die("");
-	}
-
-	// song info:
-	while ((audio.song = mpd_recv_song(audio.conn)) != NULL) {
-		sprintf(audio.artist, "uri: %s\n", mpd_song_get_uri(audio.song));
-		//sprintf(audio.artist, "%s", mpd_song_get_tag(audio.song, MPD_TAG_ARTIST, 0));
-		mpd_song_free(audio.song);
-	}
-
-	// volume:
-	audio.vol = mpd_status_get_volume(audio.stat);
-
-	// free:
-	mpd_status_free(audio.stat);
-	mpd_connection_free(audio.conn);
-
-	// update output:
-	sprintf(audio.display_mpd, "^i(%s/glyph_note.xbm)  %s",
-			icons_path, audio.artist);
-	sprintf(audio.display_vol, "^fg(#%s)[%d%%]^fg()", colour_hl, audio.vol);
 }
 
 static void
@@ -454,6 +401,11 @@ updateNetwork(void)
 	// assemble output (none or other):
 	} else
 		sprintf(net.display, "no network");
+}
+
+static void
+updateSound(void)
+{
 }
 
 int
