@@ -5,7 +5,7 @@
 static bool const use_acpi_real_capacity = false;
 
 // delay in seconds for battery/CPU update:
-static int const update_interval = 3;
+static int const update_interval = 2;
 
 // location of battery information files (folder):
 static char const* battery_path = "/sys/class/power_supply/BAT1";

@@ -14,6 +14,7 @@
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <regex.h>
+#include <signal.h>
 
 #define NUM_MAX_CORES 8 /* maximum number of CPUs */
 #define NUM_MAX_IFS 8  /* maximum number of interfaces */
@@ -60,6 +61,7 @@ static void init(void);
 static void initBattery(void);
 static void initCPU(void);
 static void initSound(void);
+static void sig_handle(int sig);
 static void updateBattery(void);
 static void updateColour(char* str, double val);
 static void updateCPU(void);
@@ -96,7 +98,7 @@ die(char const *format, ...)
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
-	exit(-1);
+	exit(EXIT_FAILURE);
 }
 
 static void
@@ -177,6 +179,10 @@ init(void)
 	sprintf(rsep, "^i(%s/glyph_2B81.xbm)", icons_path);
 	sprintf(lfsep, "^i(%s/glyph_2B82.xbm)", icons_path);
 	sprintf(lsep, "^i(%s/glyph_2B83.xbm)", icons_path);
+
+	// register signal handler:
+	signal(SIGTERM, sig_handle);
+	signal(SIGINT, sig_handle);
 }
 
 static void
@@ -259,6 +265,13 @@ initSound(void)
 	snd.line++; // we assume that current volume is on the next line
 	fclose(f);
 
+}
+
+static void
+sig_handle(int sig)
+{
+	clean();
+	exit(EXIT_SUCCESS);
 }
 
 static void
@@ -359,23 +372,26 @@ updateCPU(void)
 	next_update = time(NULL) + update_interval;
 
 	int i;
-	int busy_now, user, nice, system, idle_now;
-	int busy, idle, total;
+	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
+	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
 	FILE *f;
 	if ((f = fopen(cpu.path_usage, "r")) == NULL)
 		die("Failed to open file: %s\n", cpu.path_usage);
-	fscanf(f, "%*[^\n]"); // ignore first line
+	fscanf(f, "%*[^\n]\n"); // ignore first line
 	for (i = 0; i < num_cpus && i < NUM_MAX_CORES; i++) {
-		fscanf(f, "%*s %d %d %d %d%*[^\n]", &user, &nice, &system, &idle_now);
-		busy_now = user+nice+system;
-		busy = busy_now - cpu.busy_last[i];
-		idle = idle_now - cpu.idle_last[i];
-		total = idle+busy;
-		cpu.usage[i] = (busy*1000+5)/10/total;
-		cpu.busy_last[i] = busy_now;
-		cpu.idle_last[i] = idle_now;
+		fscanf(f, "%*[^ ] %d %d %d %d %d %d %d %d %d %d%*[^\n]\n",
+				&user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal,
+				&guest, &guest_nice);
+		busy_tot = user+nice+system+irq+softirq+steal+guest+guest_nice;
+		busy_diff = busy_tot - cpu.busy_last[i];
+		idle_tot = idle + iowait;
+		idle_diff = idle_tot - cpu.idle_last[i];
+		usage = idle_diff + busy_diff;
+		cpu.usage[i] = (busy_diff*1000+5)/10/usage;
+		cpu.busy_last[i] = busy_tot;
+		cpu.idle_last[i] = idle_tot;
 	}
 
 	// temperature:
@@ -395,7 +411,7 @@ updateCPU(void)
 	sprintf(e, "^fg(#%s)", colour_err);
 	sprintf(cpu.display, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)", icons_path);
 	for (i = 0; i < num_cpus && i < NUM_MAX_CORES; i++)
-		sprintf(cpu.display, "%s[%d%%] ", cpu.display, cpu.usage[i]);
+		sprintf(cpu.display, "%s[%2d%%] ", cpu.display, cpu.usage[i]);
 	sprintf(cpu.display, "%s^fg() %s%d%s°C", cpu.display,
 			cpu.temperature>=temp_crit ? e : cpu.temperature>=temp_high ? w:"",
 			cpu.temperature, cpu.temperature>=temp_high ? "^fg()" : "");
