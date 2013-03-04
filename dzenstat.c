@@ -292,19 +292,19 @@ updateBattery(void)
 
 	// capacity:
 	if (use_acpi_real_capacity) {
+		if ((f = fopen(bat.path_charge_now, "r")) == NULL)
+			die("Failed to open file: %s\n", bat.path_charge_now);
+		fscanf(f, "%d", &bat.charge_now);
+		fclose(f);
 		if ((f = fopen(bat.path_charge_full_design, "r")) == NULL)
 			die("Failed to open file: %s\n", bat.path_charge_full_design);
-		fscanf(f, "%d", &(bat.charge_full_design));
-		if (ferror(f)) {
-			fclose(f);
-			die("Failed to read file: %s\n", bat.path_charge_full_design);
-		}
+		fscanf(f, "%d", &bat.charge_full_design);
 		fclose(f);
-		bat.capacity = (double)bat.charge_now / (double)bat.charge_full_design;
+		bat.capacity = 100*(double)bat.charge_now / (double)bat.charge_full_design;
 	} else {
 		if ((f = fopen(bat.path_capacity, "r")) == NULL)
 			die("Failed to open file: %s\n", bat.path_capacity);
-		fscanf(f, "%d", &(bat.capacity));
+		fscanf(f, "%d", &bat.capacity);
 		if (ferror(f)) {
 			fclose(f);
 			die("Failed to read file: %s\n", bat.path_capacity);

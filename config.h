@@ -2,7 +2,7 @@
  */
 
 // use design capacity for calculating percentage?
-static bool const use_acpi_real_capacity = false;
+static bool const use_acpi_real_capacity = true;
 
 // delay in seconds for battery/CPU update:
 static int const update_interval = 2;
