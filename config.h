@@ -11,7 +11,7 @@ static int const update_interval = 2;
 static char const* battery_path = "/sys/class/power_supply/BAT1";
 
 // location of CPU temperature file:
-static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/device/temp1_input";
+static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/temp1_input";
 
 // number of CPU cores:
 static int const num_cpus = 2;
