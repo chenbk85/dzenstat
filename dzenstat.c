@@ -11,13 +11,20 @@
 #include <time.h>
 #include <math.h>
 #include <sys/types.h>
-#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
 #include <arpa/inet.h>
 #include <regex.h>
 #include <signal.h>
+#include <dirent.h>
+
+
 
 #define NUM_MAX_CORES 8 /* maximum number of CPUs */
-#define NUM_MAX_IFS 8  /* maximum number of interfaces */
+#define NUMIFS 10       /* maximum number of network interfaces */
+#define BUFLEN 128      /* length for buffers */
 
 #define C_RED    "FF3333"
 #define C_GREEN  "33FF33"
@@ -29,41 +36,41 @@ typedef struct {
 	int h, m, s;
 	int charge_now, charge_full, charge_full_design, current_now, capacity;
 	bool discharging;
-	char display[128];
+	char display[BUFLEN];
 } Battery;
 
 typedef struct {
 	char *path_temperature, *path_usage;
 	int temperature;
 	int usage[NUM_MAX_CORES], busy_last[NUM_MAX_CORES], idle_last[NUM_MAX_CORES];
-	char display[128];
+	char display[BUFLEN];
 } CPU;
 
 typedef struct {
-	char* names[NUM_MAX_IFS];
-	char* ips[NUM_MAX_IFS];
-	char display[128];
-} Network;
+	char name[BUFLEN];
+	char ip[BUFLEN];
+	bool active;
+	int quality;
+} NetworkInterface;
 
 typedef struct {
 	int max, vol, line;
 	bool mute;
-	char display[128];
+	char display[BUFLEN];
 	char const* path;
 } Sound;
 
 /* function declarations */
 static void clean(void);
-static void die(char const* format, ...);
+static void die(char const *format, ...);
 static void display(void);
-static int ifup(char const* iface);
 static void init(void);
 static void initBattery(void);
 static void initCPU(void);
 static void initSound(void);
 static void sig_handle(int sig);
 static void updateBattery(void);
-static void updateColour(char* str, double val);
+static void updateColour(char *str, double val);
 static void updateCPU(void);
 static void updateDate(void);
 static void updateNetwork(void);
@@ -72,15 +79,15 @@ static void updateSound(void);
 /* variables */
 static Battery bat;
 static CPU cpu;
-static Network net;
 static Sound snd;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
-static char* icons_path;
+static char *icons_path;
+static NetworkInterface *netifs[NUMIFS];
 
 /* seperator icons */
-static char lsep[100], lfsep[100], rsep[100], rfsep[100];
+static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
 
 /* load user configuration */
 #include "config.h"
@@ -115,13 +122,13 @@ display(void)
 		printf("%s", cpu.display);
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
-		// IP:
-		printf("%s", net.display);
-		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
+		// network:
+		// TODO
+		//printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// MPD:
 		// TODO
-		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
+		//printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// battery:
 		printf("%s", bat.display);
@@ -129,21 +136,23 @@ display(void)
 
 		// volume:
 		printf("%s", snd.display);
-		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
+		printf("   ^fg(#%s)%s^bg(#%s)^fg(#%s)  ",
+				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 
 		// date:
-		printf("^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_1.xbm) ",
-				date->tm_mon+1, icons_path);
-		printf("^fg(#FFFFFF)%d^fg()^i(%s/glyph_japanese_7.xbm) ",
-				date->tm_mday, icons_path);
+		printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%s) ",
+				date->tm_mon+1, icons_path, colour_medium);
+		printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%s) ",
+				date->tm_mday, icons_path, colour_medium);
 		printf("(^i(%s/glyph_japanese_%d.xbm))",
 				icons_path, date->tm_wday);
-		printf("  ^fg(#%s)%s^fg()^bg(#%s)   ",colour_hlbg, lfsep, colour_hlbg);
+		printf("  ^fg(#%s)%s^bg(#%s)^fg(#%s)  ",
+				colour_light_bg, lfsep, colour_light_bg, colour_light);
 
 		// time:
-		printf("^fg(#%s)%02d:%02d^fg()",
-				colour_hl, date->tm_hour, date->tm_min);
-		printf("   ^bg()");
+		printf("%02d:%02d",
+				date->tm_hour, date->tm_min);
+		printf("  ^bg()^fg()");
 
 		// end & sleep:
 		printf("\n");
@@ -151,28 +160,18 @@ display(void)
 	}
 }
 
-static int
-ifup(char const* iface)
-{
-	int i;
-	for (i = 0; i < NUM_MAX_IFS && net.names[i] != NULL; ++i)
-		if (strcmp(net.names[i], iface) == 0)
-			return i;
-	return -1;
-}
-
 static void
 init(void)
 {
 	setvbuf(stdout, NULL, _IOLBF, 1024); // force line buffering
 	delay.tv_sec = 0;
-	delay.tv_nsec = 450000000; // = 100000 µs = 100 ms = 0.1s
+	delay.tv_nsec = 450000000; // = 450000 µs = 450 ms = 0.1s
 	initBattery();
 	initCPU();
 	initSound();
 
 	// icons:
-	icons_path = (char*)malloc(strlen(getenv("PWD"))+strlen("/icons")+1);
+	icons_path = malloc(strlen(getenv("PWD"))+strlen("/icons")+1);
 	sprintf(icons_path, "%s/icons", getenv("PWD"));
 
 	sprintf(rfsep, "^i(%s/glyph_2B80.xbm)", icons_path);
@@ -189,17 +188,17 @@ static void
 initBattery(void)
 {
 	int dirlen = strlen(battery_path)+2; // +2 for terminating null and slash
-	bat.path_charge_now = (char*)malloc(dirlen+strlen("charge_now"));
+	bat.path_charge_now = malloc(dirlen+strlen("charge_now"));
 	sprintf(bat.path_charge_now, "%s/charge_now", battery_path);
-	bat.path_charge_full = (char*)malloc(dirlen+strlen("charge_full"));
+	bat.path_charge_full = malloc(dirlen+strlen("charge_full"));
 	sprintf(bat.path_charge_full, "%s/charge_full", battery_path);
-	bat.path_charge_full_design = (char*)malloc(dirlen+strlen("charge_full_design"));
+	bat.path_charge_full_design = malloc(dirlen+strlen("charge_full_design"));
 	sprintf(bat.path_charge_full_design, "%s/charge_full_design", battery_path);
-	bat.path_current_now = (char*)malloc(dirlen+strlen("current_now"));
+	bat.path_current_now = malloc(dirlen+strlen("current_now"));
 	sprintf(bat.path_current_now, "%s/current_now", battery_path);
-	bat.path_capacity = (char*)malloc(dirlen+strlen("capacity"));
+	bat.path_capacity = malloc(dirlen+strlen("capacity"));
 	sprintf(bat.path_capacity, "%s/capacity", battery_path);
-	bat.path_status = (char*)malloc(dirlen+strlen("status"));
+	bat.path_status = malloc(dirlen+strlen("status"));
 	sprintf(bat.path_status, "%s/status", battery_path);
 }
 
@@ -223,7 +222,7 @@ initSound(void)
 		"^Node 0x[[:xdigit:]]+ \\[Audio Output\\]",
 		"^Amp-Out caps:",
 		"^Amp-Out vals:" };
-	char buf[128];
+	char buf[BUFLEN];
 	int i;
 
 	// compile first regex for finding right node:
@@ -354,8 +353,9 @@ updateBattery(void)
 	}
 }
 
+// TODO return a numeric value instead
 static void
-updateColour(char* str, double val)
+updateColour(char *str, double val)
 {
 	double r = 1-val*val*val;
 	double g = 1-(val-1)*(val-1)*(val-1)*(-1);
@@ -427,48 +427,69 @@ updateDate(void)
 static void
 updateNetwork(void)
 {
+	FILE *f;
+	struct ifreq ifr[NUMIFS];
+	struct ifconf ifc;
+	int sd, i, j=0, ifnum, addr;
+
 	// prevent from updating too often:
 	static clock_t next_update = 0;
 	if (time(NULL) < next_update) return;
 	next_update = time(NULL) + update_interval;
 
-	FILE* f;
-	int i, q;
-	char c[7];
+	// clean old interfaces:
+	for (i = 0; i < NUMIFS; ++i)
+		if (netifs[i])
+			free(netifs[i]);
 
-	// get list of interfaces:
-	struct ifaddrs* ifas;
-	struct ifaddrs* ifa;
-	getifaddrs(&ifas);
-	for (ifa = ifas; ifa != NULL; ifa = ifa->ifa_next) {
-		// if it's IPv4:
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			net.ips[i] = (char*)malloc(INET_ADDRSTRLEN);
-			net.names[i] = (char*)malloc(strlen(ifa->ifa_name)+1);
-			inet_ntop(AF_INET, &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr,
-					net.ips[i], INET_ADDRSTRLEN);
-			sprintf(net.names[i], "%s", ifa->ifa_name);
-			i++;
+	// create a socket where we can use ioctl on it to retrieve interface info:
+	if ((sd = socket(PF_INET, SOCK_DGRAM, 0)) <= 0)
+		die("Failed: socket(PF_INET, SOCK_DGRAM, 0)\n");
+
+	// set 'storage' pointer and maximum 'storage space':
+	ifc.ifc_len = sizeof(ifr);
+	ifc.ifc_ifcu.ifcu_buf = (caddr_t) ifr;
+
+	// get interface info from the socket created above:
+	if (ioctl(sd, SIOCGIFCONF, &ifc) != 0)
+		die("Failed: ioctl(sd, SIOCGIFCONF, &ifc)\n");
+	
+	// get number of found interfaces:
+	ifnum = ifc.ifc_len / sizeof(struct ifreq);
+
+	for (i = 0; i < ifnum; ++i) {
+		if (ifr[i].ifr_addr.sa_family != AF_INET)
+			continue;
+
+		if (!ioctl(sd, SIOCGIFADDR, &ifr[i])) { // get address
+			// create a new NetworkInterface entity to assign information to it:
+			netifs[j] = malloc(sizeof(NetworkInterface));
+
+			// name:
+			snprintf(netifs[j]->name, BUFLEN-1, "%s", ifr[i].ifr_name);
+
+			// address:
+			addr = ((struct sockaddr_in *) (&ifr[i].ifr_addr))->sin_addr.s_addr;
+			snprintf(netifs[j]->ip, BUFLEN-1, "%d.%d.%d.%d",
+					 addr      & 0xFF, (addr>> 8) & 0xFF,
+					(addr>>16) & 0xFF, (addr>>24) & 0xFF);
+
+			// state (UP/DOWN):
+			netifs[j]->active = (!ioctl(sd, SIOCGIFFLAGS, &ifr[i]) &&
+					ifr[i].ifr_flags & IFF_UP);
+
+			// quality (if wlan):
+			if (!strcmp(netifs[j]->name, "wlan0")) {
+				if ((f = fopen("/proc/net/wireless", "r")) == NULL)
+					die("Failed to open file: /proc/net/wireless\n");
+				fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
+						&netifs[j]->quality);
+			}
+
+			++j;
 		}
 	}
-
-	// assemble output (eth):
-	if ((i = ifup("eth0")) >= 0) {
-		sprintf(net.display, "^i(%s/glyph_eth.xbm)  ^fg(#%s)%s^fg()",
-				net.names[i], colour_hl, net.ips[i]);
-	}
-	// assemble output (wlan):
-	else if ((i = ifup("wlan0")) >= 0) {
-		if ((f = fopen("/proc/net/wireless", "r")) == NULL)
-			die("Failed to open file: /proc/net/wireless\n");
-		fscanf(f, "%*[^\n]\n%*[^\n]%*s %*d %d.%*s", &q);
-		updateColour(c, q/100.0);
-		sprintf(net.display,
-				"^fg(#%s)^i(%s/glyph_wifi_%d.xbm)^fg()  ^fg(#%s)%s^fg()",
-				c, icons_path, (q-1)/20, colour_hl, net.ips[i]);
-	// assemble output (none or other):
-	} else
-		sprintf(net.display, "no network");
+	close(sd);
 }
 
 static void
