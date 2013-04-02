@@ -20,19 +20,19 @@
 #include <signal.h>
 #include <dirent.h>
 
-
-
-#define NUM_MAX_CORES 8 /* maximum number of CPUs */
-#define NUMIFS 10       /* maximum number of network interfaces */
-#define BUFLEN 128      /* length for buffers */
+#define NUM_MAX_CORES 8 // maximum number of CPUs
+#define NUMIFS 10       // maximum number of network interfaces
+#define BUFLEN 128      // length for buffers
+#define DISPLEN 512     // length for display buffers (a bit longer)
 
 #define C_RED    "FF3333"
 #define C_GREEN  "33FF33"
 #define C_YELLOW "EEEE33"
 
 typedef struct {
-	char *path_charge_now, *path_charge_full, *path_charge_full_design,
-	     *path_current_now, *path_capacity, *path_status;
+	char path_charge_now[BUFLEN], path_charge_full[BUFLEN],
+	     path_charge_full_design[BUFLEN], path_current_now[BUFLEN],
+	     path_capacity[BUFLEN], path_status[BUFLEN];
 	int h, m, s;
 	int charge_now, charge_full, charge_full_design, current_now, capacity;
 	bool discharging;
@@ -40,7 +40,7 @@ typedef struct {
 } Battery;
 
 typedef struct {
-	char *path_temperature, *path_usage;
+	char path_temperature[BUFLEN], *path_usage;
 	int temperature;
 	int usage[NUM_MAX_CORES], busy_last[NUM_MAX_CORES], idle_last[NUM_MAX_CORES];
 	char display[BUFLEN];
@@ -61,7 +61,7 @@ typedef struct {
 } Sound;
 
 /* function declarations */
-static void clean(void);
+static int colour(int val);
 static void die(char const *format, ...);
 static void display(void);
 static void init(void);
@@ -70,7 +70,6 @@ static void initCPU(void);
 static void initSound(void);
 static void sig_handle(int sig);
 static void updateBattery(void);
-static void updateColour(char *str, double val);
 static void updateCPU(void);
 static void updateDate(void);
 static void updateNetwork(void);
@@ -83,8 +82,12 @@ static Sound snd;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
-static char *icons_path;
+static char icons_path[BUFLEN];
 static NetworkInterface *netifs[NUMIFS];
+static bool interrupted;
+
+/* display */
+static char netdisp[DISPLEN];
 
 /* seperator icons */
 static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
@@ -92,10 +95,12 @@ static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
 /* load user configuration */
 #include "config.h"
 
-static void
-clean(void)
+static int
+colour(int val)
 {
-	// TODO
+	return (((int)((1.0-val*val*val/1000000.0)*255))<<16)+
+	       (((int)((1.0-(val-100)*(val-100)*(val-100)*(-1)/1000000.0)*255))<<8)+
+	       51;
 }
 
 static void
@@ -111,7 +116,7 @@ die(char const *format, ...)
 static void
 display(void)
 {
-	while (true) {
+	while (!interrupted) {
 		updateBattery();
 		updateCPU();
 		updateDate();
@@ -123,12 +128,7 @@ display(void)
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// network:
-		// TODO
-		//printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
-
-		// MPD:
-		// TODO
-		//printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
+		printf("%s", netdisp);
 
 		// battery:
 		printf("%s", bat.display);
@@ -171,13 +171,12 @@ init(void)
 	initSound();
 
 	// icons:
-	icons_path = malloc(strlen(getenv("PWD"))+strlen("/icons")+1);
-	sprintf(icons_path, "%s/icons", getenv("PWD"));
+	snprintf(icons_path, BUFLEN, "%s/icons", getenv("PWD"));
 
-	sprintf(rfsep, "^i(%s/glyph_2B80.xbm)", icons_path);
-	sprintf(rsep, "^i(%s/glyph_2B81.xbm)", icons_path);
-	sprintf(lfsep, "^i(%s/glyph_2B82.xbm)", icons_path);
-	sprintf(lsep, "^i(%s/glyph_2B83.xbm)", icons_path);
+	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", icons_path);
+	snprintf(rsep, BUFLEN, "^i(%s/glyph_2B81.xbm)", icons_path);
+	snprintf(lfsep, BUFLEN, "^i(%s/glyph_2B82.xbm)", icons_path);
+	snprintf(lsep, BUFLEN, "^i(%s/glyph_2B83.xbm)", icons_path);
 
 	// register signal handler:
 	signal(SIGTERM, sig_handle);
@@ -187,27 +186,20 @@ init(void)
 static void
 initBattery(void)
 {
-	int dirlen = strlen(battery_path)+2; // +2 for terminating null and slash
-	bat.path_charge_now = malloc(dirlen+strlen("charge_now"));
-	sprintf(bat.path_charge_now, "%s/charge_now", battery_path);
-	bat.path_charge_full = malloc(dirlen+strlen("charge_full"));
-	sprintf(bat.path_charge_full, "%s/charge_full", battery_path);
-	bat.path_charge_full_design = malloc(dirlen+strlen("charge_full_design"));
-	sprintf(bat.path_charge_full_design, "%s/charge_full_design", battery_path);
-	bat.path_current_now = malloc(dirlen+strlen("current_now"));
-	sprintf(bat.path_current_now, "%s/current_now", battery_path);
-	bat.path_capacity = malloc(dirlen+strlen("capacity"));
-	sprintf(bat.path_capacity, "%s/capacity", battery_path);
-	bat.path_status = malloc(dirlen+strlen("status"));
-	sprintf(bat.path_status, "%s/status", battery_path);
+	snprintf(bat.path_charge_now, BUFLEN, "%s/charge_now", battery_path);
+	snprintf(bat.path_charge_full, BUFLEN, "%s/charge_full", battery_path);
+	snprintf(bat.path_charge_full_design, BUFLEN, "%s/charge_full_design",
+			battery_path);
+	snprintf(bat.path_current_now, BUFLEN, "%s/current_now", battery_path);
+	snprintf(bat.path_capacity, BUFLEN, "%s/capacity", battery_path);
+	snprintf(bat.path_status, BUFLEN, "%s/status", battery_path);
 }
 
 static void
 initCPU(void)
 {
 	// temperature:
-	cpu.path_temperature = (char*)malloc(strlen(cpu_temperature_path)+1);
-	sprintf(cpu.path_temperature, "%s", cpu_temperature_path);
+	snprintf(cpu.path_temperature, BUFLEN, "%s", cpu_temperature_path);
 
 	// usage:
 	cpu.path_usage = "/proc/stat";
@@ -269,8 +261,7 @@ initSound(void)
 static void
 sig_handle(int sig)
 {
-	clean();
-	exit(EXIT_SUCCESS);
+	interrupted = true;
 }
 
 static void
@@ -338,29 +329,17 @@ updateBattery(void)
 	}
 
 	// assemble output:
-	char colour[7];
-	updateColour(colour, bat.capacity/100.0);
 	if (!bat.discharging)
 		sprintf(bat.display,
 				"^fg(#4499CC)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
 				bat.capacity, icons_path, bat.capacity/10*10);
 	else {
 		sprintf(bat.display,
-				"^fg(#%s)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
-				colour, bat.capacity, icons_path, bat.capacity/10*10);
+				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
+				colour(bat.capacity), bat.capacity, icons_path, bat.capacity/10*10);
 		sprintf(bat.display, "%s  ^fg(#FFFFFF)%dh %dm %ds^fg()",
 				bat.display, bat.h, bat.m, bat.s);
 	}
-}
-
-// TODO return a numeric value instead
-static void
-updateColour(char *str, double val)
-{
-	double r = 1-val*val*val;
-	double g = 1-(val-1)*(val-1)*(val-1)*(-1);
-	double b = 0.2;
-	sprintf(str, "%02X%02X%02X", (int)(r*255), (int)(g*255), (int)(b*255));
 }
 
 static void
@@ -437,16 +416,18 @@ updateNetwork(void)
 	if (time(NULL) < next_update) return;
 	next_update = time(NULL) + update_interval;
 
-	// clean old interfaces:
+	// clear old interfaces:
 	for (i = 0; i < NUMIFS; ++i)
-		if (netifs[i])
+		if (netifs[i]) {
 			free(netifs[i]);
+			netifs[i] = NULL;
+		}
 
 	// create a socket where we can use ioctl on it to retrieve interface info:
 	if ((sd = socket(PF_INET, SOCK_DGRAM, 0)) <= 0)
 		die("Failed: socket(PF_INET, SOCK_DGRAM, 0)\n");
 
-	// set 'storage' pointer and maximum 'storage space':
+	// set pointer and maximum space (???):
 	ifc.ifc_len = sizeof(ifr);
 	ifc.ifc_ifcu.ifcu_buf = (caddr_t) ifr;
 
@@ -461,7 +442,7 @@ updateNetwork(void)
 		if (ifr[i].ifr_addr.sa_family != AF_INET)
 			continue;
 
-		if (!ioctl(sd, SIOCGIFADDR, &ifr[i])) { // get address
+		if (!ioctl(sd, SIOCGIFADDR, &ifr[i]) && strcmp(ifr[i].ifr_name, "lo")) {
 			// create a new NetworkInterface entity to assign information to it:
 			netifs[j] = malloc(sizeof(NetworkInterface));
 
@@ -490,6 +471,25 @@ updateNetwork(void)
 		}
 	}
 	close(sd);
+
+	// assemble output:
+	netdisp[0] = 0;
+	for (i = 0; i < NUMIFS; ++i) {
+		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
+			continue;
+		if (!strcmp(netifs[i]->name, "wlan0"))
+			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
+					"^fg(#%X)^i(%s/glyph_wifi_%d.xbm)^fg()",
+					colour(netifs[i]->quality), icons_path,
+					netifs[i]->quality/20);
+		if (!strcmp(netifs[i]->name, "eth0"))
+			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
+					"^i(%s/glyph_eth.xbm)", icons_path);
+		snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
+				"  ^fg(#%s)%s^fg()   ^fg(#%s)%s^fg()   ",
+				netifs[i]->active ? colour_hl : colour_err,
+				netifs[i]->ip, colour_sep, rsep);
+	}
 }
 
 static void
@@ -514,18 +514,20 @@ updateSound(void)
 
 	// update output:
 	if (snd.mute)
-		sprintf(snd.display, "^fg(#%s)^i(%s/volume_m.xbm)^fg() [%d%%]",
+		sprintf(snd.display, "^fg(#%s)^i(%s/volume_m.xbm)^fg() %d%%",
 				C_RED, icons_path, snd.vol);
 	else
-		sprintf(snd.display, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)[%d%%]^fg()",
+		sprintf(snd.display, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)%d%%^fg()",
 				C_GREEN, icons_path, snd.vol/34, colour_hl, snd.vol);
 }
 
 int
 main(int argc, char **argv)
 {
+	interrupted = false;
 	init();
 	display();
-	return 0;
+	fprintf(stderr, "\nreceived shutdown signal ...\n");
+	return EXIT_SUCCESS;
 }
 

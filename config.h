@@ -11,7 +11,7 @@ static int const update_interval = 2;
 static char const* battery_path = "/sys/class/power_supply/BAT1";
 
 // location of CPU temperature file:
-static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/device/temp1_input";
+static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/temp1_input";
 
 // number of CPU cores:
 static int const num_cpus = 2;
@@ -19,6 +19,9 @@ static int const num_cpus = 2;
 // temperature thresholds (for highlighting with colours):
 static int const temp_high = 85;
 static int const temp_crit = 95;
+
+// show network interfaces with IP even if they are down?
+static bool const show_inactive_if = true;
 
 // colours:
 static char const* colour_light    = "555555"; // text colour in light area
