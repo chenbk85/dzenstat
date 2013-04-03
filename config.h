@@ -5,13 +5,16 @@
 static bool const use_acpi_real_capacity = true;
 
 // delay in seconds for battery/CPU update:
-static int const update_interval = 2;
+static int const update_interval = 1;
 
 // location of battery information files (folder):
 static char const* battery_path = "/sys/class/power_supply/BAT1";
 
 // location of CPU temperature file:
-static char const* cpu_temperature_path = "/sys/class/hwmon/hwmon0/temp1_input";
+static char const* cpu_temperature_paths[] = {
+	"/sys/class/hwmon/hwmon0/device/temp1_input",
+	"/sys/class/hwmon/hwmon0/temp1_input",
+};
 
 // number of CPU cores:
 static int const num_cpus = 2;

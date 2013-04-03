@@ -20,10 +20,14 @@
 #include <signal.h>
 #include <dirent.h>
 
-#define NUM_MAX_CORES 8 // maximum number of CPUs
 #define NUMIFS 10       // maximum number of network interfaces
 #define BUFLEN 128      // length for buffers
 #define DISPLEN 512     // length for display buffers (a bit longer)
+
+#define LONGDELAY() \
+		static clock_t next_update = 0; \
+		if (time(NULL) < next_update) return; \
+		next_update = time(NULL) + update_interval;
 
 #define C_RED    "FF3333"
 #define C_GREEN  "33FF33"
@@ -40,10 +44,16 @@ typedef struct {
 } Battery;
 
 typedef struct {
-	char path_temperature[BUFLEN], *path_usage;
+	int busy_last, idle_last;
+	int load;
+} Core;
+
+typedef struct {
+	char const *path_temperature;
+	char const *path_usage;
 	int temperature;
-	int usage[NUM_MAX_CORES], busy_last[NUM_MAX_CORES], idle_last[NUM_MAX_CORES];
-	char display[BUFLEN];
+	Core **cores;
+	int num_cores;
 } CPU;
 
 typedef struct {
@@ -62,18 +72,22 @@ typedef struct {
 
 /* function declarations */
 static int colour(int val);
-static void die(char const *format, ...);
+static void die(void);
 static void display(void);
 static void init(void);
 static void initBattery(void);
-static void initCPU(void);
+static void initCPULoad(void);
+static void initCPUTemp(void);
 static void initSound(void);
 static void sig_handle(int sig);
 static void updateBattery(void);
 static void updateCPU(void);
+static void updateCPULoad(void);
+static void updateCPUTemp(void);
 static void updateDate(void);
 static void updateNetwork(void);
 static void updateSound(void);
+static void wrlog(char const *format, ...);
 
 /* variables */
 static Battery bat;
@@ -86,8 +100,17 @@ static char icons_path[BUFLEN];
 static NetworkInterface *netifs[NUMIFS];
 static bool interrupted;
 
-/* display */
+/* failure flags */
+static bool batflag = false;
+static bool cpuflag = false;
+static bool netflag = false;
+static bool sndflag = false;
+
+/* displays */
 static char netdisp[DISPLEN];
+static char cpudisp[DISPLEN];
+static char batdisp[DISPLEN];
+static char snddisp[DISPLEN];
 
 /* seperator icons */
 static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
@@ -104,12 +127,8 @@ colour(int val)
 }
 
 static void
-die(char const *format, ...)
+die(void)
 {
-	va_list args;
-	va_start(args, format);
-	vfprintf(stderr, format, args);
-	va_end(args);
 	exit(EXIT_FAILURE);
 }
 
@@ -123,8 +142,15 @@ display(void)
 		updateNetwork();
 		updateSound();
 
+		// flags:
+		if (cpuflag) printf("CPU|");
+		if (netflag) printf("NET|");
+		if (batflag) printf("BAT|");
+		if (sndflag) printf("SND|");
+		printf("   ");
+
 		// CPU:
-		printf("%s", cpu.display);
+		printf("%s", cpudisp);
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// network:
@@ -167,7 +193,8 @@ init(void)
 	delay.tv_sec = 0;
 	delay.tv_nsec = 450000000; // = 450000 µs = 450 ms = 0.1s
 	initBattery();
-	initCPU();
+	initCPULoad();
+	initCPUTemp();
 	initSound();
 
 	// icons:
@@ -196,13 +223,50 @@ initBattery(void)
 }
 
 static void
-initCPU(void)
+initCPULoad(void)
 {
-	// temperature:
-	snprintf(cpu.path_temperature, BUFLEN, "%s", cpu_temperature_path);
-
-	// usage:
+	int i;
+	FILE *f;
 	cpu.path_usage = "/proc/stat";
+	char buf[BUFLEN];
+
+	// check if file exists:
+	f = fopen(cpu.path_usage, "r");
+	if (f == NULL) {
+		cpu.path_usage = NULL;
+		return;
+	}
+
+	// determine number of CPU cores:
+	for (i = 0;; ++i) {
+		fscanf(f, "%*[^\n]\n%s", buf);
+		if (strncmp(buf, "cpu", 3) != 0)
+			break;
+	}
+	cpu.num_cores = i;
+
+	// create Core entities:
+	cpu.cores = malloc(cpu.num_cores * sizeof(Core *));
+	for (i = 0; i < cpu.num_cores; ++i)
+		cpu.cores[i] = malloc(sizeof(Core));
+}
+
+static void
+initCPUTemp(void)
+{
+	int i;
+	FILE *f;
+
+	// determine temperature path:
+	cpu.path_temperature = NULL;
+	for (i = 0; i < sizeof(cpu_temperature_paths); ++i) {
+		f = fopen(cpu_temperature_paths[i], "r");
+		if (f != NULL) {
+			fclose(f);
+			cpu.path_temperature = cpu_temperature_paths[i];
+			break;
+		}
+	}
 }
 
 static void
@@ -219,21 +283,26 @@ initSound(void)
 
 	// compile first regex for finding right node:
 	for (i = 0; i < 3; ++i)
-		if (regcomp(&regex[i], regex_string[i], REG_EXTENDED))
-			die("Could not compile regex: %s\n", regex_string[i]);
+		if (regcomp(&regex[i], regex_string[i], REG_EXTENDED)) {
+			wrlog("Could not compile regex: %s\n", regex_string[i]);
+			die();
+		}
 
 	// open file from where we read lines:
 	FILE* f;
-	if ((f = fopen(snd.path, "r")) == NULL)
-		die("Could not open file: %s\n", snd.path);
+	if ((f = fopen(snd.path, "r")) == NULL) {
+		wrlog("Could not open file: %s\n", snd.path);
+		die();
+		return;
+	}
 
 	// find line with relevant information:
 	int reti;
 	for (i = 0; i < 2; ++i) {
 		while (true) {
 			if (fscanf(f, "%[^\n]\n", buf) < 0) {
-				die("Reached end of file: %s\n", snd.path);
-				break;
+				wrlog("Reached end of file: %s\n", snd.path);
+				die();
 			}
 			reti = regexec(&regex[i], buf, 0, NULL, 0);
 			if (!reti) break;
@@ -242,7 +311,8 @@ initSound(void)
 				continue;
 			} else {
 				regerror(reti, &regex[i], buf, sizeof(buf));
-				die("Regex match failed: %s\n", buf);
+				wrlog("Regex match failed: %s\n", buf);
+				die();
 			}
 		};
 	}
@@ -255,73 +325,111 @@ initSound(void)
 	sscanf(buf, "%*s %*s ofs=%x%*[^\n]\n", &snd.max);
 	snd.line++; // we assume that current volume is on the next line
 	fclose(f);
-
 }
 
 static void
 sig_handle(int sig)
 {
+	// we greatfully complete a loop instead of heartlessly jumping out:
 	interrupted = true;
 }
 
 static void
 updateBattery(void)
 {
-	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update) return;
-	next_update = time(NULL) + update_interval;
-
 	FILE *f;
 
+	// prevent from updating too often:
+	LONGDELAY();
+	batflag = false;
+
 	// battery state:
-	if ((f = fopen(bat.path_status, "r")) == NULL)
-		die("Failed to open file: %s\n", bat.path_status);
+	f = fopen(bat.path_status, "r");
+	if (f == NULL) {
+		wrlog("Failed to open file: %s\n", bat.path_status);
+		batflag = true;
+		return;
+	}
 	bat.discharging = (fgetc(f) == 'D');
 	fclose(f);
 
-	// capacity:
-	if (use_acpi_real_capacity) {
-		if ((f = fopen(bat.path_charge_now, "r")) == NULL)
-			die("Failed to open file: %s\n", bat.path_charge_now);
+	// get current charge if discharging or if calculating from design capacity:
+	if (use_acpi_real_capacity || bat.discharging) {
+		f = fopen(bat.path_charge_now, "r");
+		if (f == NULL) {
+			wrlog("Failed to open file: %s\n", bat.path_charge_now);
+			batflag = true;
+			return;
+		}
 		fscanf(f, "%d", &bat.charge_now);
-		fclose(f);
-		if ((f = fopen(bat.path_charge_full_design, "r")) == NULL)
-			die("Failed to open file: %s\n", bat.path_charge_full_design);
-		fscanf(f, "%d", &bat.charge_full_design);
-		fclose(f);
-		bat.capacity = 100*(double)bat.charge_now / (double)bat.charge_full_design;
-	} else {
-		if ((f = fopen(bat.path_capacity, "r")) == NULL)
-			die("Failed to open file: %s\n", bat.path_capacity);
-		fscanf(f, "%d", &bat.capacity);
 		if (ferror(f)) {
 			fclose(f);
-			die("Failed to read file: %s\n", bat.path_capacity);
+			wrlog("Failed to read file: %s\n", bat.path_charge_now);
+			batflag = true;
+			return;
 		}
 		fclose(f);
 	}
 
-	// prevent recalculating time if charging (not displayed):
-	if (bat.discharging) {
-		// time left:
-		if ((f = fopen(bat.path_charge_now, "r")) == NULL)
-			die("Failed to open file: %s\n", bat.path_charge_now);
-		fscanf(f, "%d", &(bat.charge_now));
-		if (ferror(f)) {
-			fclose(f);
-			die("Failed to read file: %s\n", bat.path_charge_now);
+	// calculate from design capacity:
+	if (use_acpi_real_capacity) {
+		// full charge:
+		f = fopen(bat.path_charge_full_design, "r");
+		if (f == NULL) {
+			wrlog("Failed to open file: %s\n", bat.path_charge_full_design);
+			batflag = true;
+			return;
 		}
-		fclose(f);
-		if ((f = fopen(bat.path_current_now, "r")) == NULL)
-			die("Failed to open file: %s\n", bat.path_current_now);
-		fscanf(f, "%d", &bat.current_now);
+		fscanf(f, "%d", &bat.charge_full_design);
 		if (ferror(f)) {
 			fclose(f);
-			die("Failed to read file: %s\n", bat.path_current_now);
+			wrlog("Failed to read file: %s\n", bat.path_charge_now);
+			batflag = true;
+			return;
 		}
 		fclose(f);
 
+		// charge percentage left:
+		bat.capacity = 100*(double)bat.charge_now / (double)bat.charge_full_design;
+	}
+	
+	// calculate from current capacity:
+	else {
+		f = fopen(bat.path_capacity, "r");
+		if (f == NULL) {
+			wrlog("Failed to open file: %s\n", bat.path_capacity);
+			batflag = true;
+			return;
+		}
+		fscanf(f, "%d", &bat.capacity);
+		if (ferror(f)) {
+			wrlog("Failed to read file: %s\n", bat.path_capacity);
+			batflag = true;
+			fclose(f);
+			return;
+		}
+		fclose(f);
+	}
+
+	// calculate time left (if not charging):
+	if (bat.discharging) {
+		// usage:
+		f = fopen(bat.path_current_now, "r");
+		if (f == NULL) {
+			wrlog("Failed to open file: %s\n", bat.path_current_now);
+			batflag = true;
+			return;
+		}
+		fscanf(f, "%d", &bat.current_now);
+		if (ferror(f)) {
+			fclose(f);
+			wrlog("Failed to read file: %s\n", bat.path_current_now);
+			batflag = true;
+			return;
+		}
+		fclose(f);
+
+		// time left:
 		double hours = (double)bat.charge_now / (double)bat.current_now;
 		bat.h = (int)hours;
 		bat.m = (int)(fmod(hours, 1) * 60);
@@ -329,11 +437,11 @@ updateBattery(void)
 	}
 
 	// assemble output:
-	if (!bat.discharging)
+	if (!bat.discharging) {
 		sprintf(bat.display,
 				"^fg(#4499CC)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
 				bat.capacity, icons_path, bat.capacity/10*10);
-	else {
+	} else {
 		sprintf(bat.display,
 				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
 				colour(bat.capacity), bat.capacity, icons_path, bat.capacity/10*10);
@@ -345,55 +453,91 @@ updateBattery(void)
 static void
 updateCPU(void)
 {
-	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update) return;
-	next_update = time(NULL) + update_interval;
+	int i;
+	char w[13], e[13];
 
+	// prevent from updating too often:
+	LONGDELAY();
+
+	updateCPULoad();
+	updateCPUTemp();
+
+	// assemble output:
+	snprintf(w, 12, "^fg(#%s)", colour_warn);
+	snprintf(e, 12, "^fg(#%s)", colour_err);
+	cpudisp[0] = 0;
+	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)",icons_path);
+	for (i = 0; i < cpu.num_cores; i++)
+		snprintf(cpudisp+strlen(cpudisp), DISPLEN-strlen(cpudisp), "[%2d%%] ",
+				cpu.cores[i]->load);
+	snprintf(cpudisp+strlen(cpudisp), DISPLEN-strlen(cpudisp),
+			"^fg() %s%d%s°C",
+			cpu.temperature>=temp_crit ? e : cpu.temperature>=temp_high ? w:"",
+			cpu.temperature, cpu.temperature>=temp_high ? "^fg()" : "");
+}
+
+static void
+updateCPULoad(void)
+{
+	FILE *f;
 	int i;
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
-	FILE *f;
-	if ((f = fopen(cpu.path_usage, "r")) == NULL)
-		die("Failed to open file: %s\n", cpu.path_usage);
+	f = fopen(cpu.path_usage, "r");
+	if (f == NULL) {
+		wrlog("Failed to open file: %s\n", cpu.path_usage);
+		cpuflag = true;
+		return;
+	}
+	cpuflag = false;
 	fscanf(f, "%*[^\n]\n"); // ignore first line
-	for (i = 0; i < num_cpus && i < NUM_MAX_CORES; i++) {
+	for (i = 0; i < cpu.num_cores; i++) {
 		fscanf(f, "%*[^ ] %d %d %d %d %d %d %d %d %d %d%*[^\n]\n",
 				&user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal,
 				&guest, &guest_nice);
-		busy_tot = user+nice+system+irq+softirq+steal+guest+guest_nice;
-		busy_diff = busy_tot - cpu.busy_last[i];
-		idle_tot = idle + iowait;
-		idle_diff = idle_tot - cpu.idle_last[i];
-		usage = idle_diff + busy_diff;
-		cpu.usage[i] = (busy_diff*1000+5)/10/usage;
-		cpu.busy_last[i] = busy_tot;
-		cpu.idle_last[i] = idle_tot;
-	}
+		if (ferror(f)) {
+			fclose(f);
+			wrlog("Failed to read file: %s\n", cpu.path_usage);
+			cpuflag = true;
+			return;
+		}
+		cpuflag = false;
 
-	// temperature:
-	if ((f = fopen(cpu.path_temperature, "r")) == NULL)
-		die("Failed to open file: %s\n", cpu.path_temperature);
+		// calculate usage:
+		busy_tot = user+nice+system+irq+softirq+steal+guest+guest_nice;
+		busy_diff = busy_tot - cpu.cores[i]->busy_last;
+		idle_tot = idle + iowait;
+		idle_diff = idle_tot - cpu.cores[i]->idle_last;
+		usage = idle_diff + busy_diff;
+		cpu.cores[i]->load = (busy_diff*1000+5)/10/usage;
+		cpu.cores[i]->busy_last = busy_tot;
+		cpu.cores[i]->idle_last = idle_tot;
+	}
+	fclose(f);
+}
+
+static void
+updateCPUTemp(void)
+{
+	FILE *f;
+
+	f = fopen(cpu.path_temperature, "r");
+	if (f == NULL) {
+		wrlog("Failed to open file: %s\n", cpu.path_temperature);
+		cpuflag = true;
+		return;
+	}
 	fscanf(f, "%d", &(cpu.temperature));
 	if (ferror(f)) {
 		fclose(f);
-		die("Failed to read file: %s\n", cpu.path_temperature);
+		wrlog("Failed to read file: %s\n", cpu.path_temperature);
+		cpuflag = true;
+		return;
 	}
 	fclose(f);
 	cpu.temperature /= 1000;
-
-	// assemble output:
-	char w[13], e[13];
-	sprintf(w, "^fg(#%s)", colour_warn);
-	sprintf(e, "^fg(#%s)", colour_err);
-	sprintf(cpu.display, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)", icons_path);
-	for (i = 0; i < num_cpus && i < NUM_MAX_CORES; i++)
-		sprintf(cpu.display, "%s[%2d%%] ", cpu.display, cpu.usage[i]);
-	sprintf(cpu.display, "%s^fg() %s%d%s°C", cpu.display,
-			cpu.temperature>=temp_crit ? e : cpu.temperature>=temp_high ? w:"",
-			cpu.temperature, cpu.temperature>=temp_high ? "^fg()" : "");
 }
 
 static void
@@ -412,9 +556,8 @@ updateNetwork(void)
 	int sd, i, j=0, ifnum, addr;
 
 	// prevent from updating too often:
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update) return;
-	next_update = time(NULL) + update_interval;
+	LONGDELAY();
+	netflag = false;
 
 	// clear old interfaces:
 	for (i = 0; i < NUMIFS; ++i)
@@ -424,16 +567,24 @@ updateNetwork(void)
 		}
 
 	// create a socket where we can use ioctl on it to retrieve interface info:
-	if ((sd = socket(PF_INET, SOCK_DGRAM, 0)) <= 0)
-		die("Failed: socket(PF_INET, SOCK_DGRAM, 0)\n");
+	sd = socket(PF_INET, SOCK_DGRAM, 0);
+	if (sd <= 0) {
+		wrlog("Failed: socket(PF_INET, SOCK_DGRAM, 0)\n");
+		netflag = true;
+		return;
+	}
 
 	// set pointer and maximum space (???):
 	ifc.ifc_len = sizeof(ifr);
 	ifc.ifc_ifcu.ifcu_buf = (caddr_t) ifr;
 
 	// get interface info from the socket created above:
-	if (ioctl(sd, SIOCGIFCONF, &ifc) != 0)
-		die("Failed: ioctl(sd, SIOCGIFCONF, &ifc)\n");
+	if (ioctl(sd, SIOCGIFCONF, &ifc) != 0) {
+		wrlog("Failed: ioctl(sd, SIOCGIFCONF, &ifc)\n");
+		netflag = true;
+		close(sd);
+		return;
+	}
 	
 	// get number of found interfaces:
 	ifnum = ifc.ifc_len / sizeof(struct ifreq);
@@ -461,10 +612,24 @@ updateNetwork(void)
 
 			// quality (if wlan):
 			if (!strcmp(netifs[j]->name, "wlan0")) {
-				if ((f = fopen("/proc/net/wireless", "r")) == NULL)
-					die("Failed to open file: /proc/net/wireless\n");
+				f = fopen("/proc/net/wireless", "r");
+				if (f == NULL) {
+					wrlog("Failed to open file: /proc/net/wireless\n");
+					netflag = true;
+					close(sd);
+					return;
+				}
 				fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
 						&netifs[j]->quality);
+				if (ferror(f)) {
+					fclose(f);
+					wrlog("Failed to open file: /proc/net/wireless\n");
+					netflag = true;
+					fclose(f);
+					close(sd);
+					return;
+				}
+				fclose(f);
 			}
 
 			++j;
@@ -499,8 +664,11 @@ updateSound(void)
 	int i, l, r;
 
 	// open file from where we read lines:
-	if ((f = fopen(snd.path, "r")) == NULL)
-		die("Could not open file: %s\n", snd.path);
+	if ((f = fopen(snd.path, "r")) == NULL) {
+		wrlog("Could not open file: %s\n", snd.path);
+		sndflag = true;
+		return;
+	}
 
 	// read relevant line into buffer (ignoring preceding ones):
 	for (i = 0; i <= snd.line; ++i)
@@ -521,13 +689,25 @@ updateSound(void)
 				C_GREEN, icons_path, snd.vol/34, colour_hl, snd.vol);
 }
 
+static void
+wrlog(char const *format, ...)
+{
+	fprintf(stderr, "[%02d:%02d:%02d] dzenstat: ",
+			date->tm_hour, date->tm_min, date->tm_sec);
+	va_list args;
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+}
+
 int
 main(int argc, char **argv)
 {
+	updateDate(); // needed for logging
 	interrupted = false;
 	init();
 	display();
-	fprintf(stderr, "\nreceived shutdown signal ...\n");
+	wrlog("received shutdown signal ...\n");
 	return EXIT_SUCCESS;
 }
 
