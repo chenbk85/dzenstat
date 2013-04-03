@@ -458,6 +458,7 @@ updateCPU(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
+	cpuflag = false;
 
 	updateCPULoad();
 	updateCPUTemp();
@@ -491,7 +492,6 @@ updateCPULoad(void)
 		cpuflag = true;
 		return;
 	}
-	cpuflag = false;
 	fscanf(f, "%*[^\n]\n"); // ignore first line
 	for (i = 0; i < cpu.num_cores; i++) {
 		fscanf(f, "%*[^ ] %d %d %d %d %d %d %d %d %d %d%*[^\n]\n",
@@ -503,7 +503,6 @@ updateCPULoad(void)
 			cpuflag = true;
 			return;
 		}
-		cpuflag = false;
 
 		// calculate usage:
 		busy_tot = user+nice+system+irq+softirq+steal+guest+guest_nice;
@@ -664,15 +663,23 @@ updateSound(void)
 	int i, l, r;
 
 	// open file from where we read lines:
-	if ((f = fopen(snd.path, "r")) == NULL) {
+	f = fopen(snd.path, "r");
+	if (f == NULL) {
 		wrlog("Could not open file: %s\n", snd.path);
 		sndflag = true;
 		return;
 	}
 
 	// read relevant line into buffer (ignoring preceding ones):
-	for (i = 0; i <= snd.line; ++i)
+	for (i = 0; i <= snd.line; ++i) {
 		fscanf(f, "%*[^\n]\n");
+		if (ferror(f)) {
+			fclose(f);
+			wrlog("Could not read file: %s\n", snd.path);
+			sndflag = true;
+			return;
+		}
+	}
 	fscanf(f, "%*s %*s [%x %x", &l, &r);
 	fclose(f);
 
