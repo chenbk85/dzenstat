@@ -22,7 +22,7 @@
 
 #define NUMIFS 10       // maximum number of network interfaces
 #define BUFLEN 128      // length for buffers
-#define DISPLEN 512     // length for display buffers (a bit longer)
+#define DISPLEN 512     // length for display buffers (a little longer)
 
 #define LONGDELAY() \
 		static clock_t next_update = 0; \
