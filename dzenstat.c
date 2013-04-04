@@ -10,15 +10,17 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <regex.h>
+#include <signal.h>
+#include <sys/sysinfo.h>
+
+// network
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <regex.h>
-#include <signal.h>
-#include <dirent.h>
 
 #define NUMIFS 10       // maximum number of network interfaces
 #define BUFLEN 128      // length for buffers
@@ -40,7 +42,6 @@ typedef struct {
 	int h, m, s;
 	int charge_now, charge_full, charge_full_design, current_now, capacity;
 	bool discharging;
-	char display[BUFLEN];
 } Battery;
 
 typedef struct {
@@ -55,6 +56,12 @@ typedef struct {
 	Core **cores;
 	int num_cores;
 } CPU;
+
+typedef struct {
+	long used, total;
+	int percentage;
+	struct sysinfo info;
+} Memory;
 
 typedef struct {
 	char name[BUFLEN];
@@ -85,6 +92,7 @@ static void updateCPU(void);
 static void updateCPULoad(void);
 static void updateCPUTemp(void);
 static void updateDate(void);
+static void updateMemory(void);
 static void updateNetwork(void);
 static void updateSound(void);
 static void wrlog(char const *format, ...);
@@ -92,24 +100,28 @@ static void wrlog(char const *format, ...);
 /* variables */
 static Battery bat;
 static CPU cpu;
+static NetworkInterface *netifs[NUMIFS];
+static Memory mem;
 static Sound snd;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
 static char icons_path[BUFLEN];
-static NetworkInterface *netifs[NUMIFS];
 static bool interrupted;
 
 /* failure flags */
 static bool batflag = false;
-static bool cpuflag = false;
+static bool cpuloadflag = false;
+static bool cputempflag = false;
+static bool memflag = false;
 static bool netflag = false;
 static bool sndflag = false;
 
 /* displays */
-static char netdisp[DISPLEN];
-static char cpudisp[DISPLEN];
 static char batdisp[DISPLEN];
+static char cpudisp[DISPLEN];
+static char memdisp[DISPLEN];
+static char netdisp[DISPLEN];
 static char snddisp[DISPLEN];
 
 /* seperator icons */
@@ -139,15 +151,23 @@ display(void)
 		updateBattery();
 		updateCPU();
 		updateDate();
+		updateMemory();
 		updateNetwork();
 		updateSound();
 
 		// flags:
-		if (cpuflag) printf("CPU|");
-		if (netflag) printf("NET|");
+		printf("^fg(#%s)", colour_err);
+		if (cpuloadflag) printf("CPUL|");
+		if (cputempflag) printf("CPUT|");
 		if (batflag) printf("BAT|");
+		if (memflag) printf("MEM|");
+		if (netflag) printf("NET|");
 		if (sndflag) printf("SND|");
-		printf("   ");
+		printf("^fg()   ");
+
+		// Memory:
+		printf("%s", memdisp);
+		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
 
 		// CPU:
 		printf("%s", cpudisp);
@@ -157,7 +177,7 @@ display(void)
 		printf("%s", netdisp);
 
 		// battery:
-		printf("%s", bat.display);
+		printf("%s", batdisp);
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// volume:
@@ -438,15 +458,14 @@ updateBattery(void)
 
 	// assemble output:
 	if (!bat.discharging) {
-		sprintf(bat.display,
+		snprintf(batdisp, DISPLEN,
 				"^fg(#4499CC)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
 				bat.capacity, icons_path, bat.capacity/10*10);
 	} else {
-		sprintf(bat.display,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
-				colour(bat.capacity), bat.capacity, icons_path, bat.capacity/10*10);
-		sprintf(bat.display, "%s  ^fg(#FFFFFF)%dh %dm %ds^fg()",
-				bat.display, bat.h, bat.m, bat.s);
+		snprintf(batdisp, DISPLEN,
+				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%s)%dh %dm %ds^fg()",
+				colour(bat.capacity), bat.capacity, icons_path,
+				bat.capacity/10*10, colour_hl, bat.h, bat.m, bat.s);
 	}
 }
 
@@ -458,7 +477,6 @@ updateCPU(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
-	cpuflag = false;
 
 	updateCPULoad();
 	updateCPUTemp();
@@ -484,12 +502,13 @@ updateCPULoad(void)
 	int i;
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+	cpuloadflag = false;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
 	f = fopen(cpu.path_usage, "r");
 	if (f == NULL) {
 		wrlog("Failed to open file: %s\n", cpu.path_usage);
-		cpuflag = true;
+		cpuloadflag = true;
 		return;
 	}
 	fscanf(f, "%*[^\n]\n"); // ignore first line
@@ -500,7 +519,7 @@ updateCPULoad(void)
 		if (ferror(f)) {
 			fclose(f);
 			wrlog("Failed to read file: %s\n", cpu.path_usage);
-			cpuflag = true;
+			cpuloadflag = true;
 			return;
 		}
 
@@ -521,18 +540,19 @@ static void
 updateCPUTemp(void)
 {
 	FILE *f;
+	cputempflag = false;
 
 	f = fopen(cpu.path_temperature, "r");
 	if (f == NULL) {
 		wrlog("Failed to open file: %s\n", cpu.path_temperature);
-		cpuflag = true;
+		cputempflag = true;
 		return;
 	}
 	fscanf(f, "%d", &(cpu.temperature));
 	if (ferror(f)) {
 		fclose(f);
 		wrlog("Failed to read file: %s\n", cpu.path_temperature);
-		cpuflag = true;
+		cputempflag = true;
 		return;
 	}
 	fclose(f);
@@ -544,6 +564,28 @@ updateDate(void)
 {
 	time(&rawtime);
 	date = localtime(&rawtime);
+}
+
+static void
+updateMemory(void)
+{
+	// prevent from updating too often:
+	LONGDELAY();
+	memflag = false;
+
+	if (sysinfo(&mem.info) < 0) {
+		memflag = true;
+		return;
+	}
+	mem.total = mem.info.totalram;
+	mem.used = mem.total - mem.info.freeram;
+	mem.percentage = mem.used*100 / mem.total;
+
+	// update display:
+	snprintf(memdisp, DISPLEN,
+			"RAM:  ^fg(#%s)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
+			colour_hl, mem.percentage,
+			colour(100-mem.percentage), mem.used/1024.0/1024.0);
 }
 
 static void
