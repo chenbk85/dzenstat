@@ -28,7 +28,7 @@ static int const temp_crit = 95;
 static bool const use_acpi_real_capacity = true;
 
 // delay in seconds for battery/CPU update:
-static int const update_interval = 2;
+static int const update_interval = 3;
 
 // show network interfaces with IP even if they are down?
 static bool const show_inactive_if = true;

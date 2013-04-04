@@ -50,8 +50,7 @@ typedef struct {
 } Core;
 
 typedef struct {
-	char const *path_temperature;
-	char const *path_usage;
+	char const *path_temp, *path_load;
 	int temperature;
 	Core **cores;
 	int num_cores;
@@ -73,7 +72,6 @@ typedef struct {
 typedef struct {
 	int max, vol, line;
 	bool mute;
-	char display[BUFLEN];
 	char const* path;
 } Sound;
 
@@ -109,20 +107,12 @@ static struct timespec delay;
 static time_t rawtime;
 static bool interrupted;
 
-/* failure flags */
-static bool batflag = false;
-static bool cpuloadflag = false;
-static bool cputempflag = false;
-static bool memflag = false;
-static bool netflag = false;
-static bool sndflag = false;
-
-/* displays */
-static char batdisp[DISPLEN];
-static char cpudisp[DISPLEN];
-static char memdisp[DISPLEN];
-static char netdisp[DISPLEN];
-static char snddisp[DISPLEN];
+/* displays & flags*/
+static char batdisp[DISPLEN]; static bool batflag = false;
+static char cpudisp[DISPLEN]; static bool cpuflag = false;
+static char memdisp[DISPLEN]; static bool memflag = false;
+static char netdisp[DISPLEN]; static bool netflag = false;
+static char snddisp[DISPLEN]; static bool sndflag = false;
 
 /* seperator icons */
 static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
@@ -157,9 +147,8 @@ display(void)
 
 		// flags:
 		printf("^fg(#%s)", colour_err);
-		if (cpuloadflag) printf("CPUL|");
-		if (cputempflag) printf("CPUT|");
 		if (batflag) printf("BAT|");
+		if (cpuflag) printf("CPU|");
 		if (memflag) printf("MEM|");
 		if (netflag) printf("NET|");
 		if (sndflag) printf("SND|");
@@ -181,7 +170,7 @@ display(void)
 		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
 
 		// volume:
-		printf("%s", snd.display);
+		printf("%s", snddisp);
 		printf("   ^fg(#%s)%s^bg(#%s)^fg(#%s)  ",
 				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 
@@ -245,13 +234,13 @@ initCPULoad(void)
 {
 	int i;
 	FILE *f;
-	cpu.path_usage = cpu_usage_path;
+	cpu.path_load = cpu_usage_path;
 	char buf[BUFLEN];
 
 	// check if file exists:
-	f = fopen(cpu.path_usage, "r");
+	f = fopen(cpu.path_load, "r");
 	if (f == NULL) {
-		cpu.path_usage = NULL;
+		cpu.path_load = NULL;
 		return;
 	}
 
@@ -276,12 +265,12 @@ initCPUTemp(void)
 	FILE *f;
 
 	// determine temperature path:
-	cpu.path_temperature = NULL;
+	cpu.path_temp = NULL;
 	for (i = 0; i < sizeof(cpu_temperature_paths); ++i) {
 		f = fopen(cpu_temperature_paths[i], "r");
 		if (f != NULL) {
 			fclose(f);
-			cpu.path_temperature = cpu_temperature_paths[i];
+			cpu.path_temp = cpu_temperature_paths[i];
 			break;
 		}
 	}
@@ -296,14 +285,15 @@ initMemory(void)
 static void
 initSound(void)
 {
-	snd.path = "/proc/asound/SB/codec#0";
+	FILE* f;
+	int i, res;
+	char buf[BUFLEN];
 	regex_t regex[3];
 	char const* regex_string[3] = {
 		"^Node 0x[[:xdigit:]]+ \\[Audio Output\\]",
 		"^Amp-Out caps:",
 		"^Amp-Out vals:" };
-	char buf[BUFLEN];
-	int i;
+	snd.path = "/proc/asound/SB/codec#0";
 
 	// compile first regex for finding right node:
 	for (i = 0; i < 3; ++i)
@@ -313,28 +303,27 @@ initSound(void)
 		}
 
 	// open file from where we read lines:
-	FILE* f;
-	if ((f = fopen(snd.path, "r")) == NULL) {
+	f = fopen(snd.path, "r");
+	if (f == NULL) {
 		wrlog("Could not open file: %s\n", snd.path);
 		die();
 		return;
 	}
 
 	// find line with relevant information:
-	int reti;
 	for (i = 0; i < 2; ++i) {
 		while (true) {
-			if (fscanf(f, "%[^\n]\n", buf) < 0) {
+			if (fscanf(f, "%[^\n]\n", buf) == EOF) {
 				wrlog("Reached end of file: %s\n", snd.path);
 				die();
 			}
-			reti = regexec(&regex[i], buf, 0, NULL, 0);
-			if (!reti) break;
-			else if (reti == REG_NOMATCH) {
+			res = regexec(&regex[i], buf, 0, NULL, 0);
+			if (!res) break;
+			else if (res == REG_NOMATCH) {
 				++snd.line;
 				continue;
 			} else {
-				regerror(reti, &regex[i], buf, sizeof(buf));
+				regerror(res, &regex[i], buf, sizeof(buf));
 				wrlog("Regex match failed: %s\n", buf);
 				die();
 			}
@@ -347,7 +336,7 @@ initSound(void)
 
 	// get maximum volume:
 	sscanf(buf, "%*s %*s ofs=%x%*[^\n]\n", &snd.max);
-	snd.line++; // we assume that current volume is on the next line
+	++snd.line; // we assume that current volume is on the next line
 	fclose(f);
 }
 
@@ -467,7 +456,7 @@ updateBattery(void)
 				bat.capacity, icons_path, bat.capacity/10*10);
 	} else {
 		snprintf(batdisp, DISPLEN,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%s)%dh %dm %ds^fg()",
+				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%s)%dh %02dm %02ds^fg()",
 				colour(bat.capacity), bat.capacity, icons_path,
 				bat.capacity/10*10, colour_hl, bat.h, bat.m, bat.s);
 	}
@@ -481,6 +470,7 @@ updateCPU(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
+	cpuflag = false;
 
 	updateCPULoad();
 	updateCPUTemp();
@@ -506,13 +496,12 @@ updateCPULoad(void)
 	int i;
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
-	cpuloadflag = false;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
-	f = fopen(cpu.path_usage, "r");
+	f = fopen(cpu.path_load, "r");
 	if (f == NULL) {
-		wrlog("Failed to open file: %s\n", cpu.path_usage);
-		cpuloadflag = true;
+		wrlog("Failed to open file: %s\n", cpu.path_load);
+		cpuflag = true;
 		return;
 	}
 	fscanf(f, "%*[^\n]\n"); // ignore first line
@@ -522,8 +511,8 @@ updateCPULoad(void)
 				&guest, &guest_nice);
 		if (ferror(f)) {
 			fclose(f);
-			wrlog("Failed to read file: %s\n", cpu.path_usage);
-			cpuloadflag = true;
+			wrlog("Failed to read file: %s\n", cpu.path_load);
+			cpuflag = true;
 			return;
 		}
 
@@ -544,19 +533,18 @@ static void
 updateCPUTemp(void)
 {
 	FILE *f;
-	cputempflag = false;
 
-	f = fopen(cpu.path_temperature, "r");
+	f = fopen(cpu.path_temp, "r");
 	if (f == NULL) {
-		wrlog("Failed to open file: %s\n", cpu.path_temperature);
-		cputempflag = true;
+		wrlog("Failed to open file: %s\n", cpu.path_temp);
+		cpuflag = true;
 		return;
 	}
 	fscanf(f, "%d", &(cpu.temperature));
 	if (ferror(f)) {
 		fclose(f);
-		wrlog("Failed to read file: %s\n", cpu.path_temperature);
-		cputempflag = true;
+		wrlog("Failed to read file: %s\n", cpu.path_temp);
+		cpuflag = true;
 		return;
 	}
 	fclose(f);
@@ -712,7 +700,7 @@ updateNetwork(void)
 		snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
 				"  ^fg(#%s)%s^fg()   ^fg(#%s)%s^fg()   ",
 				netifs[i]->active ? colour_hl : colour_err,
-				netifs[i]->ip, colour_sep, rsep);
+				netifs[i]->ip, colour_sep, lsep);
 	}
 }
 
@@ -749,10 +737,10 @@ updateSound(void)
 
 	// update output:
 	if (snd.mute)
-		sprintf(snd.display, "^fg(#%s)^i(%s/volume_m.xbm)^fg() %d%%",
+		snprintf(snddisp, DISPLEN, "^fg(#%s)^i(%s/volume_m.xbm)^fg() %d%%",
 				C_RED, icons_path, snd.vol);
 	else
-		sprintf(snd.display, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)%d%%^fg()",
+		snprintf(snddisp, DISPLEN, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)%d%%^fg()",
 				C_GREEN, icons_path, snd.vol/34, colour_hl, snd.vol);
 }
 
