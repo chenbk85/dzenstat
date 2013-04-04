@@ -58,8 +58,8 @@ typedef struct {
 } CPU;
 
 typedef struct {
-	long used, total;
-	int percentage;
+	int used, total, percentage;
+	char const *path;
 	struct sysinfo info;
 } Memory;
 
@@ -85,6 +85,7 @@ static void init(void);
 static void initBattery(void);
 static void initCPULoad(void);
 static void initCPUTemp(void);
+static void initMemory(void);
 static void initSound(void);
 static void sig_handle(int sig);
 static void updateBattery(void);
@@ -106,7 +107,6 @@ static Sound snd;
 static struct tm *date;
 static struct timespec delay;
 static time_t rawtime;
-static char icons_path[BUFLEN];
 static bool interrupted;
 
 /* failure flags */
@@ -215,10 +215,8 @@ init(void)
 	initBattery();
 	initCPULoad();
 	initCPUTemp();
+	initMemory();
 	initSound();
-
-	// icons:
-	snprintf(icons_path, BUFLEN, "%s/icons", getenv("PWD"));
 
 	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", icons_path);
 	snprintf(rsep, BUFLEN, "^i(%s/glyph_2B81.xbm)", icons_path);
@@ -247,7 +245,7 @@ initCPULoad(void)
 {
 	int i;
 	FILE *f;
-	cpu.path_usage = "/proc/stat";
+	cpu.path_usage = cpu_usage_path;
 	char buf[BUFLEN];
 
 	// check if file exists:
@@ -287,6 +285,12 @@ initCPUTemp(void)
 			break;
 		}
 	}
+}
+
+static void
+initMemory(void)
+{
+	mem.path = memory_path;
 }
 
 static void
@@ -361,7 +365,6 @@ updateBattery(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
-	batflag = false;
 
 	// battery state:
 	f = fopen(bat.path_status, "r");
@@ -502,7 +505,6 @@ updateCPULoad(void)
 	int i;
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
-	cpuloadflag = false;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
 	f = fopen(cpu.path_usage, "r");
@@ -540,7 +542,6 @@ static void
 updateCPUTemp(void)
 {
 	FILE *f;
-	cputempflag = false;
 
 	f = fopen(cpu.path_temperature, "r");
 	if (f == NULL) {
@@ -569,23 +570,35 @@ updateDate(void)
 static void
 updateMemory(void)
 {
+	FILE *f;
+	int i;
+
 	// prevent from updating too often:
 	LONGDELAY();
-	memflag = false;
 
-	if (sysinfo(&mem.info) < 0) {
+	// open file:
+	f = fopen(mem.path, "r");
+	if (f == NULL) {
+		wrlog("Could not open file: %s\n", mem.path);
 		memflag = true;
 		return;
 	}
-	mem.total = mem.info.totalram;
-	mem.used = mem.total - mem.info.freeram;
+
+	// calculate:
+	fscanf(f, "MemTotal: %d kB\n", &mem.total);
+	fscanf(f, "MemFree: %d kB\n", &i);
+	mem.used = mem.total-i;
+	fscanf(f, "Buffers: %d kB\n", &i);
+	mem.used -= i;
+	fscanf(f, "Cached: %d kB\n", &i);
+	mem.used -= i;
 	mem.percentage = mem.used*100 / mem.total;
 
 	// update display:
 	snprintf(memdisp, DISPLEN,
 			"RAM:  ^fg(#%s)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
 			colour_hl, mem.percentage,
-			colour(100-mem.percentage), mem.used/1024.0/1024.0);
+			colour(100-mem.percentage), mem.used/1024.0);
 }
 
 static void
@@ -598,7 +611,6 @@ updateNetwork(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
-	netflag = false;
 
 	// clear old interfaces:
 	for (i = 0; i < NUMIFS; ++i)
