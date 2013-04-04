@@ -365,6 +365,7 @@ updateBattery(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
+	batflag = false;
 
 	// battery state:
 	f = fopen(bat.path_status, "r");
@@ -505,6 +506,7 @@ updateCPULoad(void)
 	int i;
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+	cpuloadflag = false;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
 	f = fopen(cpu.path_usage, "r");
@@ -542,6 +544,7 @@ static void
 updateCPUTemp(void)
 {
 	FILE *f;
+	cputempflag = false;
 
 	f = fopen(cpu.path_temperature, "r");
 	if (f == NULL) {
@@ -575,6 +578,7 @@ updateMemory(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
+	memflag = false;
 
 	// open file:
 	f = fopen(mem.path, "r");
@@ -593,6 +597,7 @@ updateMemory(void)
 	fscanf(f, "Cached: %d kB\n", &i);
 	mem.used -= i;
 	mem.percentage = mem.used*100 / mem.total;
+	fclose(f);
 
 	// update display:
 	snprintf(memdisp, DISPLEN,
@@ -611,6 +616,7 @@ updateNetwork(void)
 
 	// prevent from updating too often:
 	LONGDELAY();
+	netflag = false;
 
 	// clear old interfaces:
 	for (i = 0; i < NUMIFS; ++i)
