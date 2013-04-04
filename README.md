@@ -17,7 +17,7 @@ have a screenshot!
 
 Just to give you an impression what it looks like:
 
-![screenshot](http://ayekat.ch/img/host/screen_dzenstat.png)
+![screenshot](http://ayekat.ch/img/host/screen_dzenstat2.png)
 
 
 
