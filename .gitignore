@@ -1,3 +1,4 @@
 dzenstat
 valgrind.log
 *.swp
+a.out
