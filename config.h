@@ -41,17 +41,19 @@ static int const temp_crit = 95;
  * (colours, icons, ...)
  */
 
-static char const *path_icons = "icons";       // path to icons folder
+static char const *path_icons = "icons";     // path to icons folder
 
 // colours:
-static char const *colour_light    = "555555"; // light area text colour
-static char const *colour_light_bg = "EEEEEE"; // light area background colour
-static char const *colour_medium   = "EEEEEE"; // medium area text colour
-static char const *colour_medium_bg= "555555"; // medium area background colour
+static int const colour_light     = 0x555555; // light area text colour
+static int const colour_light_bg  = 0xEEEEEE; // light area background colour
+static int const colour_medium    = 0xEEEEEE; // medium area text colour
+static int const colour_medium_bg = 0x555555; // medium area background colour
 
-static char const *colour_hl       = "FFFFFF"; // highlighted text colour
-static char const *colour_err      = "FF3333"; // error text colour strings
-static char const *colour_warn     = "EEEE33"; // warning text strings
+static int const colour_hl        = 0xFFFFFF; // highlighted text colour
+static int const colour_ok        = 0x33EE33; // success text colour ('green')
+static int const colour_warn      = 0xEEEE33; // warning text colour ('yellow')
+static int const colour_err       = 0xEE3333; // error text colour   ('red')
 
-static char const *colour_sep      = "555555"; // seperator colour
+static int const colour_sep       = 0x555555; // seperator colour
+static int const colour_bat       = 0x4499CC; // battery colour if being charged
 

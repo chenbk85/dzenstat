@@ -31,10 +31,6 @@
 		if (time(NULL) < next_update) return; \
 		next_update = time(NULL) + update_interval;
 
-#define C_RED    "FF3333"
-#define C_GREEN  "33FF33"
-#define C_YELLOW "EEEE33"
-
 typedef struct {
 	char path_charge_now[BUFLEN], path_charge_full[BUFLEN],
 	     path_charge_full_design[BUFLEN], path_current_now[BUFLEN],
@@ -146,7 +142,7 @@ display(void)
 		updateSound();
 
 		// flags:
-		printf("^fg(#%s)", colour_err);
+		printf("^fg(#%X)", colour_err);
 		if (batflag) printf("BAT|");
 		if (cpuflag) printf("CPU|");
 		if (memflag) printf("MEM|");
@@ -156,32 +152,32 @@ display(void)
 
 		// Memory:
 		printf("%s", memdisp);
-		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
+		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		// CPU:
 		printf("%s", cpudisp);
-		printf("   ^fg(#%s)%s^fg()   ", colour_sep, rsep);
+		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		// network:
 		printf("%s", netdisp);
 
 		// battery:
 		printf("%s", batdisp);
-		printf("   ^fg(#%s)%s^fg()   ", colour_sep, lsep);
+		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 
 		// volume:
 		printf("%s", snddisp);
-		printf("   ^fg(#%s)%s^bg(#%s)^fg(#%s)  ",
+		printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 
 		// date:
-		printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%s) ",
+		printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
 				date->tm_mon+1, path_icons, colour_medium);
-		printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%s) ",
+		printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%X) ",
 				date->tm_mday, path_icons, colour_medium);
 		printf("(^i(%s/glyph_japanese_%d.xbm))",
 				path_icons, date->tm_wday);
-		printf("  ^fg(#%s)%s^bg(#%s)^fg(#%s)  ",
+		printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_light_bg, lfsep, colour_light_bg, colour_light);
 
 		// time:
@@ -403,7 +399,7 @@ updateBattery(void)
 		fclose(f);
 
 		// charge percentage left:
-		bat.capacity = 100*(double)bat.charge_now / (double)bat.charge_full_design;
+		bat.capacity = 100 * bat.charge_now / bat.charge_full_design;
 	}
 	
 	// calculate from current capacity:
@@ -452,11 +448,11 @@ updateBattery(void)
 	// assemble output:
 	if (!bat.discharging) {
 		snprintf(batdisp, DISPLEN,
-				"^fg(#4499CC)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
-				bat.capacity, path_icons, bat.capacity/10*10);
+				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
+				colour_bat, bat.capacity, path_icons, bat.capacity/10*10);
 	} else {
 		snprintf(batdisp, DISPLEN,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%s)%dh %02dm %02ds^fg()",
+				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%X)%dh %02dm %02ds^fg()",
 				colour(bat.capacity), bat.capacity, path_icons,
 				bat.capacity/10*10, colour_hl, bat.h, bat.m, bat.s);
 	}
@@ -476,10 +472,11 @@ updateCPU(void)
 	updateCPUTemp();
 
 	// assemble output:
-	snprintf(w, 12, "^fg(#%s)", colour_warn);
-	snprintf(e, 12, "^fg(#%s)", colour_err);
+	snprintf(w, 12, "^fg(#%X)", colour_warn);
+	snprintf(e, 12, "^fg(#%X)", colour_err);
 	cpudisp[0] = 0;
-	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)",path_icons);
+	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#%X)",
+			path_icons, colour_hl);
 	for (i = 0; i < cpu.num_cores; i++)
 		snprintf(cpudisp+strlen(cpudisp), DISPLEN-strlen(cpudisp), "[%2d%%] ",
 				cpu.cores[i]->load);
@@ -495,7 +492,7 @@ updateCPULoad(void)
 	FILE *f;
 	int i;
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
-	int user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+	int user, nice, system, idle, iowait, irq, softirq, steal, guest,guest_nice;
 
 	// usage (TODO the values are somewhat wrong, figure out why):
 	f = fopen(cpu.path_load, "r");
@@ -589,7 +586,7 @@ updateMemory(void)
 
 	// update display:
 	snprintf(memdisp, DISPLEN,
-			"RAM:  ^fg(#%s)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
+			"RAM:  ^fg(#%X)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
 			colour_hl, mem.percentage,
 			colour(100-mem.percentage), mem.used/1024.0);
 }
@@ -698,7 +695,7 @@ updateNetwork(void)
 			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
 					"^i(%s/glyph_eth.xbm)", path_icons);
 		snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
-				"  ^fg(#%s)%s^fg()   ^fg(#%s)%s^fg()   ",
+				"  ^fg(#%X)%s^fg()   ^fg(#%X)%s^fg()   ",
 				netifs[i]->active ? colour_hl : colour_err,
 				netifs[i]->ip, colour_sep, lsep);
 	}
@@ -737,11 +734,12 @@ updateSound(void)
 
 	// update output:
 	if (snd.mute)
-		snprintf(snddisp, DISPLEN, "^fg(#%s)^i(%s/volume_m.xbm)^fg() %d%%",
-				C_RED, path_icons, snd.vol);
+		snprintf(snddisp, DISPLEN, "^fg(#%X)^i(%s/volume_m.xbm)^fg()  %2d%%",
+				colour_err, path_icons, snd.vol);
 	else
-		snprintf(snddisp, DISPLEN, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)%d%%^fg()",
-				C_GREEN, path_icons, snd.vol/34, colour_hl, snd.vol);
+		snprintf(snddisp, DISPLEN,
+				"^fg(#%X)^i(%s/volume_%d.xbm)  ^fg(#%X)%2d%%^fg()",
+				colour_ok, path_icons, snd.vol/34, colour_hl, snd.vol);
 }
 
 static void
