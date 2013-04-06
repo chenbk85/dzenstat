@@ -176,11 +176,11 @@ display(void)
 
 		// date:
 		printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%s) ",
-				date->tm_mon+1, icons_path, colour_medium);
+				date->tm_mon+1, path_icons, colour_medium);
 		printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%s) ",
-				date->tm_mday, icons_path, colour_medium);
+				date->tm_mday, path_icons, colour_medium);
 		printf("(^i(%s/glyph_japanese_%d.xbm))",
-				icons_path, date->tm_wday);
+				path_icons, date->tm_wday);
 		printf("  ^fg(#%s)%s^bg(#%s)^fg(#%s)  ",
 				colour_light_bg, lfsep, colour_light_bg, colour_light);
 
@@ -207,10 +207,10 @@ init(void)
 	initMemory();
 	initSound();
 
-	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", icons_path);
-	snprintf(rsep, BUFLEN, "^i(%s/glyph_2B81.xbm)", icons_path);
-	snprintf(lfsep, BUFLEN, "^i(%s/glyph_2B82.xbm)", icons_path);
-	snprintf(lsep, BUFLEN, "^i(%s/glyph_2B83.xbm)", icons_path);
+	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", path_icons);
+	snprintf(rsep, BUFLEN, "^i(%s/glyph_2B81.xbm)", path_icons);
+	snprintf(lfsep, BUFLEN, "^i(%s/glyph_2B82.xbm)", path_icons);
+	snprintf(lsep, BUFLEN, "^i(%s/glyph_2B83.xbm)", path_icons);
 
 	// register signal handler:
 	signal(SIGTERM, sig_handle);
@@ -220,13 +220,13 @@ init(void)
 static void
 initBattery(void)
 {
-	snprintf(bat.path_charge_now, BUFLEN, "%s/charge_now", battery_path);
-	snprintf(bat.path_charge_full, BUFLEN, "%s/charge_full", battery_path);
+	snprintf(bat.path_charge_now, BUFLEN, "%s/charge_now", path_bat);
+	snprintf(bat.path_charge_full, BUFLEN, "%s/charge_full", path_bat);
 	snprintf(bat.path_charge_full_design, BUFLEN, "%s/charge_full_design",
-			battery_path);
-	snprintf(bat.path_current_now, BUFLEN, "%s/current_now", battery_path);
-	snprintf(bat.path_capacity, BUFLEN, "%s/capacity", battery_path);
-	snprintf(bat.path_status, BUFLEN, "%s/status", battery_path);
+			path_bat);
+	snprintf(bat.path_current_now, BUFLEN, "%s/current_now", path_bat);
+	snprintf(bat.path_capacity, BUFLEN, "%s/capacity", path_bat);
+	snprintf(bat.path_status, BUFLEN, "%s/status", path_bat);
 }
 
 static void
@@ -234,7 +234,7 @@ initCPULoad(void)
 {
 	int i;
 	FILE *f;
-	cpu.path_load = cpu_usage_path;
+	cpu.path_load = path_cpu_load;
 	char buf[BUFLEN];
 
 	// check if file exists:
@@ -266,11 +266,11 @@ initCPUTemp(void)
 
 	// determine temperature path:
 	cpu.path_temp = NULL;
-	for (i = 0; i < sizeof(cpu_temperature_paths); ++i) {
-		f = fopen(cpu_temperature_paths[i], "r");
+	for (i = 0; i < sizeof(path_cpu_temp); ++i) {
+		f = fopen(path_cpu_temp[i], "r");
 		if (f != NULL) {
 			fclose(f);
-			cpu.path_temp = cpu_temperature_paths[i];
+			cpu.path_temp = path_cpu_temp[i];
 			break;
 		}
 	}
@@ -279,13 +279,13 @@ initCPUTemp(void)
 static void
 initMemory(void)
 {
-	mem.path = memory_path;
+	mem.path = path_mem;
 }
 
 static void
 initSound(void)
 {
-	FILE* f;
+	FILE *f;
 	int i, res;
 	char buf[BUFLEN];
 	regex_t regex[3];
@@ -293,7 +293,7 @@ initSound(void)
 		"^Node 0x[[:xdigit:]]+ \\[Audio Output\\]",
 		"^Amp-Out caps:",
 		"^Amp-Out vals:" };
-	snd.path = "/proc/asound/SB/codec#0";
+	snd.path = path_snd;
 
 	// compile first regex for finding right node:
 	for (i = 0; i < 3; ++i)
@@ -453,11 +453,11 @@ updateBattery(void)
 	if (!bat.discharging) {
 		snprintf(batdisp, DISPLEN,
 				"^fg(#4499CC)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
-				bat.capacity, icons_path, bat.capacity/10*10);
+				bat.capacity, path_icons, bat.capacity/10*10);
 	} else {
 		snprintf(batdisp, DISPLEN,
 				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%s)%dh %02dm %02ds^fg()",
-				colour(bat.capacity), bat.capacity, icons_path,
+				colour(bat.capacity), bat.capacity, path_icons,
 				bat.capacity/10*10, colour_hl, bat.h, bat.m, bat.s);
 	}
 }
@@ -479,7 +479,7 @@ updateCPU(void)
 	snprintf(w, 12, "^fg(#%s)", colour_warn);
 	snprintf(e, 12, "^fg(#%s)", colour_err);
 	cpudisp[0] = 0;
-	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)",icons_path);
+	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#FFFFFF)",path_icons);
 	for (i = 0; i < cpu.num_cores; i++)
 		snprintf(cpudisp+strlen(cpudisp), DISPLEN-strlen(cpudisp), "[%2d%%] ",
 				cpu.cores[i]->load);
@@ -692,11 +692,11 @@ updateNetwork(void)
 		if (!strcmp(netifs[i]->name, "wlan0"))
 			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
 					"^fg(#%X)^i(%s/glyph_wifi_%d.xbm)^fg()",
-					colour(netifs[i]->quality), icons_path,
+					colour(netifs[i]->quality), path_icons,
 					netifs[i]->quality/20);
 		if (!strcmp(netifs[i]->name, "eth0"))
 			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
-					"^i(%s/glyph_eth.xbm)", icons_path);
+					"^i(%s/glyph_eth.xbm)", path_icons);
 		snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
 				"  ^fg(#%s)%s^fg()   ^fg(#%s)%s^fg()   ",
 				netifs[i]->active ? colour_hl : colour_err,
@@ -738,10 +738,10 @@ updateSound(void)
 	// update output:
 	if (snd.mute)
 		snprintf(snddisp, DISPLEN, "^fg(#%s)^i(%s/volume_m.xbm)^fg() %d%%",
-				C_RED, icons_path, snd.vol);
+				C_RED, path_icons, snd.vol);
 	else
 		snprintf(snddisp, DISPLEN, "^fg(#%s)^i(%s/volume_%d.xbm) ^fg(#%s)%d%%^fg()",
-				C_GREEN, icons_path, snd.vol/34, colour_hl, snd.vol);
+				C_GREEN, path_icons, snd.vol/34, colour_hl, snd.vol);
 }
 
 static void
