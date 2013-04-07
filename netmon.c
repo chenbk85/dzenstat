@@ -3,14 +3,15 @@
  * polling - polling is bad).
  */
 
-#include <string.h>          // memset
+#include <string.h>          // memset()
 #include <stdlib.h>          // EXIT_FAILURE, EXIT_SUCCESS
-#include <stdio.h>           // printf
-//#include <asm/types.h>       // ??? (was in the manpage, but not needed)
-#include <sys/socket.h>      // anything network related
+#include <stdio.h>           // printf()
+#include <sys/socket.h>      // <socket stuff>
 #include <linux/rtnetlink.h> // sockaddr_nl
+#include <unistd.h>          // close()
 
 #define BUFSIZE 4096
+#define STDIN 0
 
 int main()
 {
@@ -20,7 +21,7 @@ int main()
 	struct sockaddr_nl sa;
 	struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
 	struct nlmsghdr *nh;
-	fd_set socket_set;
+	fd_set fds;
 
 	// defined fields of the socket address netlink:
 	memset(&sa, 0, sizeof(sa));
@@ -32,26 +33,37 @@ int main()
 	bind(fd, (struct sockaddr *) &sa, sizeof(sa));
 
 	while (1) {
-		// clear socket set:
-		FD_ZERO(&socket_set);
+		// clear fd set:
+		FD_ZERO(&fds);
 
-		// add our file descriptor to the list of sockets to be observed:
-		FD_SET(fd, &socket_set);
+		// add our fd and STDIN to the list of fds to be observed:
+		FD_SET(fd, &fds);
+		FD_SET(STDIN, &fds);
 
-		// wait for activity on socket with select():
-		s = select(FD_SETSIZE, &socket_set, NULL, NULL, NULL);
-
-		// notification:
+		// wait for activity:
+		s = select(FD_SETSIZE, &fds, NULL, NULL, NULL);
+		printf("ACTIVITY!\n", s);
 		if (s < 0) {
-			fprintf(stderr, "failure: select() = %d\n", s);
-			continue;
+			fprintf(stderr, "select() < 0 (%d)\n", s);
+			break;
 		}
-		printf("success: select() = %d\n", s);
 
-		// read message:
-		len = recvmsg(fd, &msg, 0);
+		// check user input:
+		if (FD_ISSET(STDIN, &fds)) {
+			scanf("%s", buf);
+			if (!strcmp(buf, "q"))
+				break;
+			printf("to exit, type 'q'\n");
+		}
+		
+		// process data:
+		else {
+			// read message:
+			len = recvmsg(fd, &msg, 0);
 
-		// handle message (TODO 'man 7 netlink' for how to do that)
+			// handle message (TODO 'man 7 netlink' for how to do that)
+		}
 	}
+	close(fd);
 }
 
