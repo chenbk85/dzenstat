@@ -462,7 +462,7 @@ static void
 updateCPU(void)
 {
 	int i;
-	char w[13], e[13];
+	char w[16], e[16];
 
 	// prevent from updating too often:
 	LONGDELAY();
@@ -472,8 +472,8 @@ updateCPU(void)
 	updateCPUTemp();
 
 	// assemble output:
-	snprintf(w, 12, "^fg(#%X)", colour_warn);
-	snprintf(e, 12, "^fg(#%X)", colour_err);
+	snprintf(w, 13, "^fg(#%X)", colour_warn);
+	snprintf(e, 13, "^fg(#%X)", colour_err);
 	cpudisp[0] = 0;
 	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#%X)",
 			path_icons, colour_hl);
