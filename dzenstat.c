@@ -15,12 +15,11 @@
 #include <sys/sysinfo.h>
 
 // network
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
-#include <arpa/inet.h>
+#include <linux/rtnetlink.h> // sockaddr_nl
 
 #define NUMIFS 10       // maximum number of network interfaces
 #define BUFLEN 128      // length for buffers
@@ -64,6 +63,8 @@ typedef struct {
 	bool active;
 	int quality;
 } NetworkInterface;
+int net_fd;
+struct sockaddr_nl net_sa;
 
 typedef struct {
 	int max, vol, line;
@@ -72,6 +73,7 @@ typedef struct {
 } Sound;
 
 /* function declarations */
+static void pollEvents(void);
 static int colour(int val);
 static void die(void);
 static void display(void);
@@ -80,6 +82,7 @@ static void initBattery(void);
 static void initCPULoad(void);
 static void initCPUTemp(void);
 static void initMemory(void);
+static void initNetwork(void);
 static void initSound(void);
 static void sig_handle(int sig);
 static void updateBattery(void);
@@ -100,8 +103,10 @@ static Memory mem;
 static Sound snd;
 static struct tm *date;
 static struct timespec delay;
+static struct timeval longdelay;
 static time_t rawtime;
 static bool interrupted;
+static fd_set fds;
 
 /* displays & flags*/
 static char batdisp[DISPLEN]; static bool batflag = false;
@@ -116,11 +121,39 @@ static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
 /* load user configuration */
 #include "config.h"
 
+static void
+pollEvents(void)
+{
+	int s;
+
+	// clear fd set and add file_descriptors:
+	FD_ZERO(&fds);
+	FD_SET(net_fd, &fds);    // network
+
+	// wait for activity:
+	s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
+
+	// handle return value:
+	if (s < 0)  // error
+		return;
+	if (!s)     // timeout
+		return;
+
+	// handle network file descriptor (for now):
+	char buf[4096];
+	struct iovec iov = { buf, sizeof(buf) };
+	struct msghdr msg = { &net_sa, sizeof(net_sa), &iov, 1, NULL, 0, 0 };
+
+	// read data from fd to clear it (we don't care about the content):
+	recvmsg(net_fd, &msg, 0);
+	updateNetwork();
+}
+
 static int
 colour(int val)
 {
-	return (((int)((1.0-val*val*val/1000000.0)*255))<<16)+
-	       (((int)((1.0-(val-100)*(val-100)*(val-100)*(-1)/1000000.0)*255))<<8)+
+	return ((int)((1.0-val*val*val/1000000.0)*255)<<16)+
+	       ((int)((1.0-(val-100)*(val-100)*(val-100)*(-1)/1000000.0)*255)<<8)+
 	       51;
 }
 
@@ -138,8 +171,9 @@ display(void)
 		updateCPU();
 		updateDate();
 		updateMemory();
-		updateNetwork();
 		updateSound();
+
+		pollEvents();
 
 		// flags:
 		printf("^fg(#%X)", colour_err);
@@ -196,11 +230,14 @@ init(void)
 {
 	setvbuf(stdout, NULL, _IOLBF, 1024); // force line buffering
 	delay.tv_sec = 0;
-	delay.tv_nsec = 450000000; // = 450000 µs = 450 ms = 0.1s
+	delay.tv_nsec = 450000000; // 450000000 ns = 450000 µs = 450 ms = 0.45 s
+	longdelay.tv_sec = 0;
+	longdelay.tv_usec = 450000; // 450000 µs = 450 ms = 0.45 s
 	initBattery();
 	initCPULoad();
 	initCPUTemp();
 	initMemory();
+	initNetwork();
 	initSound();
 
 	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", path_icons);
@@ -276,6 +313,22 @@ static void
 initMemory(void)
 {
 	mem.path = path_mem;
+}
+
+static void
+initNetwork(void)
+{
+	// prepare fields
+	memset(&net_sa, 0, sizeof(net_sa));
+	net_sa.nl_family = AF_NETLINK;
+	net_sa.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR;
+
+	// get file descriptor:
+	net_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+	bind(net_fd, (struct sockaddr *) &net_sa, sizeof(net_sa));
+
+	// initial update:
+	updateNetwork();
 }
 
 static void
