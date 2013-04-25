@@ -2,3 +2,12 @@ dzenstat
 valgrind.log
 *.swp
 a.out
+pres/*.pdf
+pres/*.log
+pres/*.aux
+pres/*.nav
+pres/*.out
+pres/*.snm
+pres/*.toc
+pres/*.vrb
+
