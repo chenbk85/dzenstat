@@ -14,12 +14,20 @@ int main()
 	FD_ZERO(&fds);
 	FD_SET(fd, &fds);
 	while (1) {
+		/* need this to get all events */
+		mpd_send_idle_mask(conn, MPD_IDLE_PLAYER);
 		s = select(FD_SETSIZE, &fds, NULL, NULL, NULL);
 		if (s < 0) {
-			printf("select() = %d\n", s);
-			exit(EXIT_FAILURE);
+			fprintf(stderr, "select(): %d\n", s);
+			return EXIT_FAILURE;
 		}
 		printf("event!\n");
+		mpd_recv_idle(conn, true);
+		if (mpd_connection_get_error(conn)) {
+			fprintf(stderr, "mpd_recv_idle(): %s\n",
+					mpd_connection_get_error_message(conn));
+			return EXIT_FAILURE;
+		}
 	}
 	return EXIT_SUCCESS;
 }

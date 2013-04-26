@@ -132,11 +132,6 @@ pollEvents(void)
 	struct iovec iov = { buf, sizeof(buf) };
 	struct msghdr msg = { &net_sa, sizeof(net_sa), &iov, 1, NULL, 0, 0 };
 
-	/* clear fd set and add file_descriptors */
-	FD_ZERO(&fds);
-	FD_SET(snd.fd, &fds);
-	FD_SET(net_fd, &fds);
-
 	/* wait for activity */
 	longdelay.tv_sec = 1;
 	longdelay.tv_usec = 0;  /* 450000 µs = 450 ms = 0.45 s */
@@ -241,7 +236,10 @@ display(void)
 static void
 init(void)
 {
-	setvbuf(stdout, NULL, _IOLBF, 1024); /* force line buffering */
+	/* force line buffering */
+	setvbuf(stdout, NULL, _IOLBF, 1024);
+
+	/* initialise modules */
 	initBattery();
 	initCPULoad();
 	initCPUTemp();
@@ -249,6 +247,12 @@ init(void)
 	initNetwork();
 	initSound();
 
+	/* clear fd set and add file_descriptors */
+	FD_ZERO(&fds);
+	FD_SET(snd.fd, &fds);
+	FD_SET(net_fd, &fds);
+
+	/* define separator icons */
 	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", path_icons);
 	snprintf(rsep, BUFLEN, "^i(%s/glyph_2B81.xbm)", path_icons);
 	snprintf(lfsep, BUFLEN, "^i(%s/glyph_2B82.xbm)", path_icons);
