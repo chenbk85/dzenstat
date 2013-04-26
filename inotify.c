@@ -3,11 +3,11 @@
  * polling - polling is bad).
  */
 
-#include <stdlib.h>      // select() stack
-#include <stdio.h>       // printf()
-#include <unistd.h>      // read(), close()
+#include <stdlib.h>      /* select() stack */
+#include <stdio.h>       /* printf() */
+#include <unistd.h>      /* read(), close() */
 #include <sys/inotify.h>
-#include <string.h>      // strcmp()
+#include <string.h>      /* strcmp() */
 
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define BUFLEN (1024*(EVENT_SIZE+16))
@@ -21,7 +21,7 @@ int main()
 	struct inotify_event *ev;
 	fd_set fds;
 
-	// initialise inotify:
+	/* initialise inotify */
 	fd = inotify_init();
 	if (fd < 0) {
 		perror("inotify_init");
@@ -35,14 +35,14 @@ int main()
 	}
 
 	while (1) {
-		// clear fd set:
+		/* clear fd set */
 		FD_ZERO(&fds);
 
-		// add our fd and STDIN to the list of fds to be observed:
+		/* add our fd and STDIN to the list of fds to be observed */
 		FD_SET(fd, &fds);
 		FD_SET(STDIN, &fds);
 
-		// wait for activity:
+		/* wait for activity */
 		s = select(FD_SETSIZE, &fds, NULL, NULL, NULL);
 		printf("ACTIVITY!\n");
 		if (s < 0) {
@@ -50,7 +50,7 @@ int main()
 			break;
 		}
 
-		// check user input:
+		/* check user input */
 		if (FD_ISSET(STDIN, &fds)) {
 			scanf("%s", buf);
 			if (!strcmp(buf, "q"))
@@ -58,16 +58,16 @@ int main()
 			printf("to exit, type 'q'\n");
 		}
 		
-		// process data
+		/* process data */
 		else {
-			// read data:
+			/* read data */
 			len = read(fd, buf, BUFLEN);
 			if (len < 0) {
 				fprintf(stderr, "read() < 0\n");
 				break;
 			}
 
-			// print formatted data:
+			/* print formatted data */
 			i = 0;
 			while (i < len) {
 				printf("new event:\n");

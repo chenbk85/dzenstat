@@ -1,8 +1,8 @@
 \documentclass{beamer}
-\usetheme{Bergen}
-\usecolortheme{seagull}
-\usepackage{verbatim}
+\usetheme{Bergen}       % simple
+\usecolortheme{seagull} % grey
 
+% information for title:
 \title{dzenstat}
 \author{ayekat}
 \date{\today}
@@ -12,6 +12,12 @@
 \maketitle
 
 \begin{frame}
+  \frametitle{about}
+  \begin{itemize}
+    \pause\item System monitor for dzen2
+    \pause\item RAM, CPU, network IF, battery, volume, date\,\&\,time
+  \end{itemize}
+  \pause
   \begin{center}
     \includegraphics[height=.8em]{img/dzenstat1.png}\\
     \includegraphics[height=.8em]{img/dzenstat2.png}\\
@@ -20,16 +26,8 @@
 \end{frame}
 
 \begin{frame}
-  \frametitle{about}
-  \begin{itemize}
-    \pause\item System monitor for dzen2
-    \pause\item RAM, CPU, network IF, battery, volume, date\,\&\,time
-  \end{itemize}
-\end{frame}
-
-\begin{frame}
   \frametitle{but\,\dots}
-  \pause\includegraphics[width=\textwidth]{img/conky.png}
+  \includegraphics[width=\textwidth]{img/conky.png}
 \end{frame}
 
 \begin{frame}[fragile]
@@ -51,7 +49,7 @@
     \pause\item no, seriously, no clue about coding
     \pause\item learn a lot of things
     \begin{itemize}
-      \pause\item \verb+select()+, netmon, inotify,\,\dots
+      \pause\item \verb+select()+, netmon, inotify, ALSA,\,\dots
     \end{itemize}
   \end{itemize}
 \end{frame}
@@ -59,8 +57,11 @@
 \begin{frame}[fragile]
   \frametitle{todo}
   \begin{itemize}
-    \pause\item polling (ALSA \verb+snd_mixer_set_callback()+)
     \pause\item too much sh in C
+    \pause\item hairy configuration
+    \begin{itemize}
+      \item not modular
+    \end{itemize}
   \end{itemize}
 \end{frame}
 

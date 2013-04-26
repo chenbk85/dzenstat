@@ -13,17 +13,18 @@
 #include <regex.h>
 #include <signal.h>
 #include <sys/sysinfo.h>
+#include <alsa/asoundlib.h>
 
-// network
+/* network */
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
-#include <linux/rtnetlink.h> // sockaddr_nl
+#include <linux/rtnetlink.h> /* sockaddr_nl */
 
-#define NUMIFS 10       // maximum number of network interfaces
-#define BUFLEN 128      // length for buffers
-#define DISPLEN 512     // length for display buffers (a little longer)
+#define NUMIFS 10       /* maximum number of network interfaces */
+#define BUFLEN 128      /* length for buffers */
+#define DISPLEN 512     /* length for display buffers (a little longer) */
 
 #define LONGDELAY() \
 		static clock_t next_update = 0; \
@@ -67,14 +68,17 @@ int net_fd;
 struct sockaddr_nl net_sa;
 
 typedef struct {
-	int max, vol, line;
+	long min, max, vol;
 	bool mute;
 	char const* path;
+	int fd;
+	snd_mixer_t *ctl;
+	snd_mixer_elem_t *elem;
 } Sound;
 
 /* function declarations */
 static void pollEvents(void);
-static int colour(int val);
+static unsigned int colour(int val);
 static void die(void);
 static void display(void);
 static void init(void);
@@ -102,13 +106,12 @@ static NetworkInterface *netifs[NUMIFS];
 static Memory mem;
 static Sound snd;
 static struct tm *date;
-static struct timespec delay;
 static struct timeval longdelay;
 static time_t rawtime;
 static bool interrupted;
 static fd_set fds;
 
-/* displays & flags*/
+/* displays & flags */
 static char batdisp[DISPLEN]; static bool batflag = false;
 static char cpudisp[DISPLEN]; static bool cpuflag = false;
 static char memdisp[DISPLEN]; static bool memflag = false;
@@ -125,35 +128,47 @@ static void
 pollEvents(void)
 {
 	int s;
-
-	// clear fd set and add file_descriptors:
-	FD_ZERO(&fds);
-	FD_SET(net_fd, &fds);    // network
-
-	// wait for activity:
-	s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
-
-	// handle return value:
-	if (s < 0)  // error
-		return;
-	if (!s)     // timeout
-		return;
-
-	// handle network file descriptor (for now):
 	char buf[4096];
 	struct iovec iov = { buf, sizeof(buf) };
 	struct msghdr msg = { &net_sa, sizeof(net_sa), &iov, 1, NULL, 0, 0 };
 
-	// read data from fd to clear it (we don't care about the content):
-	recvmsg(net_fd, &msg, 0);
-	updateNetwork();
+	/* clear fd set and add file_descriptors */
+	FD_ZERO(&fds);
+	FD_SET(snd.fd, &fds);
+	FD_SET(net_fd, &fds);
+
+	/* wait for activity */
+	longdelay.tv_sec = 1;
+	longdelay.tv_usec = 0;  /* 450000 µs = 450 ms = 0.45 s */
+	s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
+
+	/* handle return value */
+	if (s < 0)  /* error */
+		return;
+	if (!s)     /* timeout */
+		return;
+
+	/* network */
+	if (FD_ISSET(net_fd, &fds)) {
+		/* clear data in buffer */
+		recvmsg(net_fd, &msg, 0);
+		updateNetwork();
+	}
+
+	/* sound */
+	if (FD_ISSET(snd.fd, &fds)) {
+		/* clear data in buffer */
+		snd_mixer_handle_events(snd.ctl);
+		updateSound();
+	}
 }
 
-static int
+static unsigned int
 colour(int val)
 {
-	return ((int)((1.0-val*val*val/1000000.0)*255)<<16)+
-	       ((int)((1.0-(val-100)*(val-100)*(val-100)*(-1)/1000000.0)*255)<<8)+
+	return (unsigned int)
+	       ((int) ((1.0-val*val*val/1000000.0)*255)<<16)+
+	       ((int) ((1.0-(val-100)*(val-100)*(val-100)*(-1)/1000000.0)*255)<<8)+
 	       51;
 }
 
@@ -171,11 +186,10 @@ display(void)
 		updateCPU();
 		updateDate();
 		updateMemory();
-		updateSound();
 
 		pollEvents();
 
-		// flags:
+		/* flags */
 		printf("^fg(#%X)", colour_err);
 		if (batflag) printf("BAT|");
 		if (cpuflag) printf("CPU|");
@@ -184,27 +198,27 @@ display(void)
 		if (sndflag) printf("SND|");
 		printf("^fg()   ");
 
-		// Memory:
+		/* memory */
 		printf("%s", memdisp);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
-		// CPU:
+		/* CPU */
 		printf("%s", cpudisp);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
-		// network:
+		/* network */
 		printf("%s", netdisp);
 
-		// battery:
+		/* battery */
 		printf("%s", batdisp);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 
-		// volume:
+		/* volume */
 		printf("%s", snddisp);
 		printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 
-		// date:
+		/* date */
 		printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
 				date->tm_mon+1, path_icons, colour_medium);
 		printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%X) ",
@@ -214,25 +228,20 @@ display(void)
 		printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_light_bg, lfsep, colour_light_bg, colour_light);
 
-		// time:
+		/* time */
 		printf("%02d:%02d",
 				date->tm_hour, date->tm_min);
 		printf("  ^bg()^fg()");
 
-		// end & sleep:
+		/* end */
 		printf("\n");
-		nanosleep(&delay, NULL);
 	}
 }
 
 static void
 init(void)
 {
-	setvbuf(stdout, NULL, _IOLBF, 1024); // force line buffering
-	delay.tv_sec = 0;
-	delay.tv_nsec = 450000000; // 450000000 ns = 450000 µs = 450 ms = 0.45 s
-	longdelay.tv_sec = 0;
-	longdelay.tv_usec = 450000; // 450000 µs = 450 ms = 0.45 s
+	setvbuf(stdout, NULL, _IOLBF, 1024); /* force line buffering */
 	initBattery();
 	initCPULoad();
 	initCPUTemp();
@@ -245,7 +254,7 @@ init(void)
 	snprintf(lfsep, BUFLEN, "^i(%s/glyph_2B82.xbm)", path_icons);
 	snprintf(lsep, BUFLEN, "^i(%s/glyph_2B83.xbm)", path_icons);
 
-	// register signal handler:
+	/* register signal handler */
 	signal(SIGTERM, sig_handle);
 	signal(SIGINT, sig_handle);
 }
@@ -267,17 +276,17 @@ initCPULoad(void)
 {
 	int i;
 	FILE *f;
-	cpu.path_load = path_cpu_load;
 	char buf[BUFLEN];
+	cpu.path_load = path_cpu_load;
 
-	// check if file exists:
+	/* check if file exists */
 	f = fopen(cpu.path_load, "r");
 	if (f == NULL) {
 		cpu.path_load = NULL;
 		return;
 	}
 
-	// determine number of CPU cores:
+	/* determine number of CPU cores */
 	for (i = 0;; ++i) {
 		fscanf(f, "%*[^\n]\n%s", buf);
 		if (strncmp(buf, "cpu", 3) != 0)
@@ -285,7 +294,7 @@ initCPULoad(void)
 	}
 	cpu.num_cores = i;
 
-	// create Core entities:
+	/* create Core entities */
 	cpu.cores = malloc(cpu.num_cores * sizeof(Core *));
 	for (i = 0; i < cpu.num_cores; ++i)
 		cpu.cores[i] = malloc(sizeof(Core));
@@ -297,7 +306,7 @@ initCPUTemp(void)
 	int i;
 	FILE *f;
 
-	// determine temperature path:
+	/* determine temperature path */
 	cpu.path_temp = NULL;
 	for (i = 0; i < sizeof(path_cpu_temp); ++i) {
 		f = fopen(path_cpu_temp[i], "r");
@@ -318,81 +327,71 @@ initMemory(void)
 static void
 initNetwork(void)
 {
-	// prepare fields
+	/* prepare fields */
 	memset(&net_sa, 0, sizeof(net_sa));
 	net_sa.nl_family = AF_NETLINK;
 	net_sa.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR;
 
-	// get file descriptor:
+	/* get file descriptor */
 	net_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	bind(net_fd, (struct sockaddr *) &net_sa, sizeof(net_sa));
 
-	// initial update:
+	/* initial update */
 	updateNetwork();
 }
 
 static void
 initSound(void)
 {
-	FILE *f;
-	int i, res;
-	char buf[BUFLEN];
-	regex_t regex[3];
-	char const* regex_string[3] = {
-		"^Node 0x[[:xdigit:]]+ \\[Audio Output\\]",
-		"^Amp-Out caps:",
-		"^Amp-Out vals:" };
-	snd.path = path_snd;
+	/* new */
+	int ret = 0;
+	snd_mixer_selem_id_t *sid;
+	char const *card = "default";
+	struct pollfd pfd;
 
-	// compile first regex for finding right node:
-	for (i = 0; i < 3; ++i)
-		if (regcomp(&regex[i], regex_string[i], REG_EXTENDED)) {
-			wrlog("Could not compile regex: %s\n", regex_string[i]);
-			die();
-		}
+	/* new */
 
-	// open file from where we read lines:
-	f = fopen(snd.path, "r");
-	if (f == NULL) {
-		wrlog("Could not open file: %s\n", snd.path);
+	/* set up control interface */
+	ret += snd_mixer_open(&snd.ctl, 0);
+	ret += snd_mixer_attach(snd.ctl, card);
+	ret += snd_mixer_selem_register(snd.ctl, NULL, NULL);
+	ret += snd_mixer_load(snd.ctl);
+	if (ret < 0) {
+		wrlog("ALSA: Could not open mixer\n");
 		die();
-		return;
 	}
 
-	// find line with relevant information:
-	for (i = 0; i < 2; ++i) {
-		while (true) {
-			if (fscanf(f, "%[^\n]\n", buf) == EOF) {
-				wrlog("Reached end of file: %s\n", snd.path);
-				die();
-			}
-			res = regexec(&regex[i], buf, 0, NULL, 0);
-			if (!res) break;
-			else if (res == REG_NOMATCH) {
-				++snd.line;
-				continue;
-			} else {
-				regerror(res, &regex[i], buf, sizeof(buf));
-				wrlog("Regex match failed: %s\n", buf);
-				die();
-			}
-		};
+	/* get mixer element */
+	snd_mixer_selem_id_alloca(&sid);
+	snd_mixer_selem_id_set_index(sid, 0);
+	snd_mixer_selem_id_set_name(sid, "Master");
+	snd.elem = snd_mixer_find_selem(snd.ctl, sid);
+	if (snd.elem == NULL) {
+		wrlog("ALSA: Could not get mixer element\n");
+		snd_mixer_detach(snd.ctl, card);
+		snd_mixer_close(snd.ctl);
+		die();
 	}
-	// we're done with regex:
-	regfree(&regex[0]);
-	regfree(&regex[1]);
-	regfree(&regex[2]);
 
-	// get maximum volume:
-	sscanf(buf, "%*s %*s ofs=%x%*[^\n]\n", &snd.max);
-	++snd.line; // we assume that current volume is on the next line
-	fclose(f);
+	/* get poll file descriptor */
+	if (snd_mixer_poll_descriptors(snd.ctl, &pfd, 1)) {
+		snd.fd = pfd.fd;
+	} else {
+		wrlog("ALSA: Could not get file descriptor\n");
+		die();
+	}
+
+	/* get volume range */
+	snd_mixer_selem_get_playback_volume_range(snd.elem, &snd.min, &snd.max);
+
+	/* initial update */
+	updateSound();
 }
 
 static void
 sig_handle(int sig)
 {
-	// we greatfully complete a loop instead of heartlessly jumping out:
+	/* we greatfully complete a loop instead of heartlessly jumping out */
 	interrupted = true;
 }
 
@@ -400,12 +399,13 @@ static void
 updateBattery(void)
 {
 	FILE *f;
+	double hours;
 
-	// prevent from updating too often:
+	/* prevent from updating too often */
 	LONGDELAY();
 	batflag = false;
 
-	// battery state:
+	/* battery state */
 	f = fopen(bat.path_status, "r");
 	if (f == NULL) {
 		wrlog("Failed to open file: %s\n", bat.path_status);
@@ -415,7 +415,7 @@ updateBattery(void)
 	bat.discharging = (fgetc(f) == 'D');
 	fclose(f);
 
-	// get current charge if discharging or if calculating from design capacity:
+	/* get current charge if discharging or calculating from design capacity */
 	if (use_acpi_real_capacity || bat.discharging) {
 		f = fopen(bat.path_charge_now, "r");
 		if (f == NULL) {
@@ -433,9 +433,9 @@ updateBattery(void)
 		fclose(f);
 	}
 
-	// calculate from design capacity:
+	/* calculate from design capacity */
 	if (use_acpi_real_capacity) {
-		// full charge:
+		/* full charge */
 		f = fopen(bat.path_charge_full_design, "r");
 		if (f == NULL) {
 			wrlog("Failed to open file: %s\n", bat.path_charge_full_design);
@@ -451,11 +451,11 @@ updateBattery(void)
 		}
 		fclose(f);
 
-		// charge percentage left:
+		/* charge percentage left */
 		bat.capacity = 100 * bat.charge_now / bat.charge_full_design;
 	}
 	
-	// calculate from current capacity:
+	/* calculate from current capacity */
 	else {
 		f = fopen(bat.path_capacity, "r");
 		if (f == NULL) {
@@ -473,9 +473,9 @@ updateBattery(void)
 		fclose(f);
 	}
 
-	// calculate time left (if not charging):
+	/* calculate time left (if not charging) */
 	if (bat.discharging) {
-		// usage:
+		/* usage */
 		f = fopen(bat.path_current_now, "r");
 		if (f == NULL) {
 			wrlog("Failed to open file: %s\n", bat.path_current_now);
@@ -491,14 +491,14 @@ updateBattery(void)
 		}
 		fclose(f);
 
-		// time left:
-		double hours = (double)bat.charge_now / (double)bat.current_now;
-		bat.h = (int)hours;
-		bat.m = (int)(fmod(hours, 1) * 60);
-		bat.s = (int)(fmod((fmod(hours, 1) * 60), 1) * 60);
+		/* time left */
+		hours = (double) bat.charge_now / (double) bat.current_now;
+		bat.h = (int) hours;
+		bat.m = (int) (fmod(hours, 1) * 60);
+		bat.s = (int) (fmod((fmod(hours, 1) * 60), 1) * 60);
 	}
 
-	// assemble output:
+	/* assemble output */
 	if (!bat.discharging) {
 		snprintf(batdisp, DISPLEN,
 				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
@@ -517,14 +517,14 @@ updateCPU(void)
 	int i;
 	char w[16], e[16];
 
-	// prevent from updating too often:
+	/* prevent from updating too often */
 	LONGDELAY();
 	cpuflag = false;
 
 	updateCPULoad();
 	updateCPUTemp();
 
-	// assemble output:
+	/* assemble output */
 	snprintf(w, 13, "^fg(#%X)", colour_warn);
 	snprintf(e, 13, "^fg(#%X)", colour_err);
 	cpudisp[0] = 0;
@@ -547,14 +547,14 @@ updateCPULoad(void)
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest,guest_nice;
 
-	// usage (TODO the values are somewhat wrong, figure out why):
+	/* usage */
 	f = fopen(cpu.path_load, "r");
 	if (f == NULL) {
 		wrlog("Failed to open file: %s\n", cpu.path_load);
 		cpuflag = true;
 		return;
 	}
-	fscanf(f, "%*[^\n]\n"); // ignore first line
+	fscanf(f, "%*[^\n]\n"); /* ignore first line */
 	for (i = 0; i < cpu.num_cores; i++) {
 		fscanf(f, "%*[^ ] %d %d %d %d %d %d %d %d %d %d%*[^\n]\n",
 				&user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal,
@@ -566,7 +566,7 @@ updateCPULoad(void)
 			return;
 		}
 
-		// calculate usage:
+		/* calculate usage */
 		busy_tot = user+nice+system+irq+softirq+steal+guest+guest_nice;
 		busy_diff = busy_tot - cpu.cores[i]->busy_last;
 		idle_tot = idle + iowait;
@@ -614,11 +614,11 @@ updateMemory(void)
 	FILE *f;
 	int i;
 
-	// prevent from updating too often:
+	/* prevent from updating too often */
 	LONGDELAY();
 	memflag = false;
 
-	// open file:
+	/* open file */
 	f = fopen(mem.path, "r");
 	if (f == NULL) {
 		wrlog("Could not open file: %s\n", mem.path);
@@ -626,7 +626,7 @@ updateMemory(void)
 		return;
 	}
 
-	// calculate:
+	/* calculate */
 	fscanf(f, "MemTotal: %d kB\n", &mem.total);
 	fscanf(f, "MemFree: %d kB\n", &i);
 	mem.used = mem.total-i;
@@ -637,7 +637,7 @@ updateMemory(void)
 	mem.percentage = mem.used*100 / mem.total;
 	fclose(f);
 
-	// update display:
+	/* update display */
 	snprintf(memdisp, DISPLEN,
 			"RAM:  ^fg(#%X)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
 			colour_hl, mem.percentage,
@@ -652,18 +652,18 @@ updateNetwork(void)
 	struct ifconf ifc;
 	int sd, i, j=0, ifnum, addr;
 
-	// prevent from updating too often:
+	/* prevent from updating too often */
 	LONGDELAY();
 	netflag = false;
 
-	// clear old interfaces:
+	/* clear old interfaces */
 	for (i = 0; i < NUMIFS; ++i)
 		if (netifs[i]) {
 			free(netifs[i]);
 			netifs[i] = NULL;
 		}
 
-	// create a socket where we can use ioctl on it to retrieve interface info:
+	/* create a socket where we can use ioctl to retrieve interface info */
 	sd = socket(PF_INET, SOCK_DGRAM, 0);
 	if (sd <= 0) {
 		wrlog("Failed: socket(PF_INET, SOCK_DGRAM, 0)\n");
@@ -671,11 +671,11 @@ updateNetwork(void)
 		return;
 	}
 
-	// set pointer and maximum space (???):
+	/* set pointer and maximum space (???) */
 	ifc.ifc_len = sizeof(ifr);
 	ifc.ifc_ifcu.ifcu_buf = (caddr_t) ifr;
 
-	// get interface info from the socket created above:
+	/* get interface info from the socket created above */
 	if (ioctl(sd, SIOCGIFCONF, &ifc) != 0) {
 		wrlog("Failed: ioctl(sd, SIOCGIFCONF, &ifc)\n");
 		netflag = true;
@@ -683,7 +683,7 @@ updateNetwork(void)
 		return;
 	}
 	
-	// get number of found interfaces:
+	/* get number of found interfaces */
 	ifnum = ifc.ifc_len / sizeof(struct ifreq);
 
 	for (i = 0; i < ifnum; ++i) {
@@ -691,23 +691,23 @@ updateNetwork(void)
 			continue;
 
 		if (!ioctl(sd, SIOCGIFADDR, &ifr[i]) && strcmp(ifr[i].ifr_name, "lo")) {
-			// create a new NetworkInterface entity to assign information to it:
+			/* create a new NetworkInterface to assign information to it */
 			netifs[j] = malloc(sizeof(NetworkInterface));
 
-			// name:
+			/* name */
 			snprintf(netifs[j]->name, BUFLEN-1, "%s", ifr[i].ifr_name);
 
-			// address:
+			/* address */
 			addr = ((struct sockaddr_in *) (&ifr[i].ifr_addr))->sin_addr.s_addr;
 			snprintf(netifs[j]->ip, BUFLEN-1, "%d.%d.%d.%d",
 					 addr      & 0xFF, (addr>> 8) & 0xFF,
 					(addr>>16) & 0xFF, (addr>>24) & 0xFF);
 
-			// state (UP/DOWN):
+			/* state (UP/DOWN) */
 			netifs[j]->active = (!ioctl(sd, SIOCGIFFLAGS, &ifr[i]) &&
-					ifr[i].ifr_flags & IFF_UP);
+					ifr[i].ifr_flags | IFF_UP);
 
-			// quality (if wlan):
+			/* quality (if wlan) */
 			if (!strcmp(netifs[j]->name, "wlan0")) {
 				f = fopen("/proc/net/wireless", "r");
 				if (f == NULL) {
@@ -734,7 +734,7 @@ updateNetwork(void)
 	}
 	close(sd);
 
-	// assemble output:
+	/* assemble output */
 	netdisp[0] = 0;
 	for (i = 0; i < NUMIFS; ++i) {
 		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
@@ -757,50 +757,30 @@ updateNetwork(void)
 static void
 updateSound(void)
 {
-	FILE* f;
-	int i, l, r;
+	int s;
+	long l, r;
 
-	// open file from where we read lines:
-	f = fopen(snd.path, "r");
-	if (f == NULL) {
-		wrlog("Could not open file: %s\n", snd.path);
-		sndflag = true;
-		return;
-	}
+	snd_mixer_selem_get_playback_volume(snd.elem,SND_MIXER_SCHN_FRONT_LEFT,&l);
+	snd_mixer_selem_get_playback_volume(snd.elem,SND_MIXER_SCHN_FRONT_RIGHT,&r);
+	snd_mixer_selem_get_playback_switch(snd.elem,SND_MIXER_SCHN_FRONT_LEFT,&s);
+	snd.vol = (l+r)*50/snd.max;
+	snd.mute = s == 0;
 
-	// read relevant line into buffer (ignoring preceding ones):
-	for (i = 0; i <= snd.line; ++i) {
-		fscanf(f, "%*[^\n]\n");
-		if (ferror(f)) {
-			fclose(f);
-			wrlog("Could not read file: %s\n", snd.path);
-			sndflag = true;
-			return;
-		}
-	}
-	fscanf(f, "%*s %*s [%x %x", &l, &r);
-	fclose(f);
-
-	// get volume:
-	snd.mute = l&0x80 && r&&0x80;
-	snd.vol = ((snd.mute?l-0x80:l)+(snd.mute?r-0x80:r))*50/snd.max;
-
-	// update output:
 	if (snd.mute)
-		snprintf(snddisp, DISPLEN, "^fg(#%X)^i(%s/volume_m.xbm)^fg()  %2d%%",
+		snprintf(snddisp, DISPLEN, "^fg(#%X)^i(%s/volume_m.xbm)  ^fg()%2ld%%",
 				colour_err, path_icons, snd.vol);
 	else
 		snprintf(snddisp, DISPLEN,
-				"^fg(#%X)^i(%s/volume_%d.xbm)  ^fg(#%X)%2d%%^fg()",
+				"^fg(#%X)^i(%s/volume_%ld.xbm) ^fg(#%X)%2ld%%^fg()",
 				colour_ok, path_icons, snd.vol/34, colour_hl, snd.vol);
 }
 
 static void
 wrlog(char const *format, ...)
 {
+	va_list args;
 	fprintf(stderr, "[%02d:%02d:%02d] dzenstat: ",
 			date->tm_hour, date->tm_min, date->tm_sec);
-	va_list args;
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
@@ -809,7 +789,7 @@ wrlog(char const *format, ...)
 int
 main(int argc, char **argv)
 {
-	updateDate(); // needed for logging
+	updateDate(); /* needed for logging */
 	interrupted = false;
 	init();
 	display();

@@ -65,7 +65,7 @@ main(int argc, char **argv)
 		snd_mixer_selem_get_playback_volume(elem, SND_MIXER_SCHN_FRONT_RIGHT,
 				&volr);
 		snd_mixer_selem_get_playback_volume_range(elem, &min, &max);
-		printf("volume: %d%%\n", ((voll+volr)*50)/max);
+		printf("volume: %ld%%\n", ((voll+volr)*50)/max);
 	}
 
 	/* tear down */
