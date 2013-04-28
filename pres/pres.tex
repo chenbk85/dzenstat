@@ -11,11 +11,16 @@
 
 \maketitle
 
-\begin{frame}
+\begin{frame}[fragile]
   \frametitle{about}
   \begin{itemize}
     \pause\item System monitor for dzen2
     \pause\item RAM, CPU, network IF, battery, volume, date\,\&\,time
+    \pause\item Goal: dwm-like simplicity
+    \begin{itemize}
+      \pause\item \verb+config.h+
+      \pause\item \verb+./dzenstat | dzen2+
+    \end{itemize}
   \end{itemize}
   \pause
   \begin{center}
@@ -27,13 +32,14 @@
 
 \begin{frame}
   \frametitle{but\,\dots}
-  \includegraphics[width=\textwidth]{img/conky.png}
+  \pause\includegraphics[width=\textwidth]{img/conky.png}
 \end{frame}
 
 \begin{frame}[fragile]
   \frametitle{why?}
   \pause
   \begin{verbatim}${execi 1 muted.sh}\end{verbatim}
+  \pause
   with \textbf{muted.sh:}
   \begin{verbatim}
 [ $(amixer get Master | tail -n 1 | \
@@ -49,7 +55,7 @@
     \pause\item no, seriously, no clue about coding
     \pause\item learn a lot of things
     \begin{itemize}
-      \pause\item \verb+select()+, netmon, inotify, ALSA,\,\dots
+      \pause\item netmon, inotify, ALSA, MPD, regex\,\dots
     \end{itemize}
   \end{itemize}
 \end{frame}

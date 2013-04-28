@@ -96,6 +96,7 @@ static void updateCPUTemp(void);
 static void updateDate(void);
 static void updateMemory(void);
 static void updateNetwork(void);
+static void updateNetworkDisplay(void);
 static void updateSound(void);
 static void wrlog(char const *format, ...);
 
@@ -131,6 +132,11 @@ pollEvents(void)
 	char buf[4096];
 	struct iovec iov = { buf, sizeof(buf) };
 	struct msghdr msg = { &net_sa, sizeof(net_sa), &iov, 1, NULL, 0, 0 };
+
+	/* add file_descriptors */
+	FD_ZERO(&fds);
+	FD_SET(snd.fd, &fds);
+	FD_SET(net_fd, &fds);
 
 	/* wait for activity */
 	longdelay.tv_sec = 1;
@@ -181,6 +187,7 @@ display(void)
 		updateCPU();
 		updateDate();
 		updateMemory();
+		updateNetworkDisplay();
 
 		pollEvents();
 
@@ -246,11 +253,6 @@ init(void)
 	initMemory();
 	initNetwork();
 	initSound();
-
-	/* clear fd set and add file_descriptors */
-	FD_ZERO(&fds);
-	FD_SET(snd.fd, &fds);
-	FD_SET(net_fd, &fds);
 
 	/* define separator icons */
 	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", path_icons);
@@ -738,7 +740,17 @@ updateNetwork(void)
 	}
 	close(sd);
 
-	/* assemble output */
+	updateNetworkDisplay();
+}
+
+static void
+updateNetworkDisplay(void)
+{
+	int i;
+
+	/* prevent from updating too often */
+	LONGDELAY();
+
 	netdisp[0] = 0;
 	for (i = 0; i < NUMIFS; ++i) {
 		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
