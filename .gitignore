@@ -2,6 +2,7 @@ dzenstat
 valgrind.log
 *.swp
 a.out
+mpd_conky
 pres/*.pdf
 pres/*.log
 pres/*.aux
