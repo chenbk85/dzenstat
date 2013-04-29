@@ -653,7 +653,6 @@ updateMemory(void)
 static void
 updateNetwork(void)
 {
-	FILE *f;
 	struct ifreq ifr[NUMIFS];
 	struct ifconf ifc;
 	int sd, i, j=0, ifnum, addr;
@@ -712,29 +711,6 @@ updateNetwork(void)
 			/* state (UP/DOWN) */
 			netifs[j]->active = (!ioctl(sd, SIOCGIFFLAGS, &ifr[i]) &&
 					ifr[i].ifr_flags | IFF_UP);
-
-			/* quality (if wlan) */
-			if (!strcmp(netifs[j]->name, "wlan0")) {
-				f = fopen("/proc/net/wireless", "r");
-				if (f == NULL) {
-					wrlog("Failed to open file: /proc/net/wireless\n");
-					netflag = true;
-					close(sd);
-					return;
-				}
-				fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
-						&netifs[j]->quality);
-				if (ferror(f)) {
-					fclose(f);
-					wrlog("Failed to open file: /proc/net/wireless\n");
-					netflag = true;
-					fclose(f);
-					close(sd);
-					return;
-				}
-				fclose(f);
-			}
-
 			++j;
 		}
 	}
@@ -746,20 +722,42 @@ updateNetwork(void)
 static void
 updateNetworkDisplay(void)
 {
+	FILE *f;
 	int i;
 
 	/* prevent from updating too often */
 	LONGDELAY();
+	netflag = false;
 
 	netdisp[0] = 0;
 	for (i = 0; i < NUMIFS; ++i) {
 		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
 			continue;
-		if (!strcmp(netifs[i]->name, "wlan0"))
+		if (!strcmp(netifs[i]->name, "wlan0")) {
+			/* quality (if wlan) */
+			if (!strcmp(netifs[i]->name, "wlan0")) {
+				f = fopen("/proc/net/wireless", "r");
+				if (f == NULL) {
+					wrlog("Failed to open file: /proc/net/wireless\n");
+					netflag = true;
+					return;
+				}
+				fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
+						&netifs[i]->quality);
+				if (ferror(f)) {
+					fclose(f);
+					wrlog("Failed to open file: /proc/net/wireless\n");
+					netflag = true;
+					fclose(f);
+					return;
+				}
+				fclose(f);
+			}
 			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
 					"^fg(#%X)^i(%s/glyph_wifi_%d.xbm)^fg()",
 					colour(netifs[i]->quality), path_icons,
 					netifs[i]->quality/20);
+		}
 		if (!strcmp(netifs[i]->name, "eth0"))
 			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
 					"^i(%s/glyph_eth.xbm)", path_icons);
