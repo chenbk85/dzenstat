@@ -1,18 +1,20 @@
-NAME = dzenstat
-LFLAGS = -lm -lasound
-CFLAGS = -Wall -Wpedantic -std=gnu99 -g
+CC=gcc
+LDFLAGS=-lm -lasound
+CFLAGS=-Wall -Wpedantic -std=gnu99 -g
+SOURCES=$(wildcard src/*.c)
+OBJECTS=$(SOURCES:.c=.o)
+EXECUTABLE=dzenstat
 
-dzenstat: src/dzenstat.c
-	gcc ${CFLAGS} ${LFLAGS} -o ${NAME} src/dzenstat.c
+all: $(SOURCES) $(EXECUTABLE)
 
-alsa: tmp/alsa.c
-	gcc ${CFLAGS} -lasound tmp/alsa.c
+$(EXECUTABLE): $(OBJECTS)
+	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
 
-inotify: tmp/inotify.c
-	gcc ${CFLAGS} tmp/inotify.c
+.c.o:
+	$(CC) -c $(CFLAGS) $? -o $@
 
-netmon: tmp/netmon.c
-	gcc ${CFLAGS} tmp/netmon.c
+clean:
+	rm $(OBJECTS)
 
 mpd: tmp/mpd.c
 	gcc ${CFLAGS} -lmpdclient tmp/mpd.c

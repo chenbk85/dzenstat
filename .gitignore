@@ -1,8 +1,6 @@
 dzenstat
 valgrind.log
 *.swp
-a.out
-mpd_conky
 gnugen/*.pdf
 gnugen/*.log
 gnugen/*.aux
@@ -11,4 +9,7 @@ gnugen/*.out
 gnugen/*.snm
 gnugen/*.toc
 gnugen/*.vrb
+src/*.o
+tmp/a.out
+tmp/mpd_conky
 
