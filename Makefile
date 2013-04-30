@@ -2,19 +2,21 @@ NAME = dzenstat
 LFLAGS = -lm -lasound
 CFLAGS = -Wall -Wpedantic -std=gnu99 -g
 
-# m (math):  for fmod())
-dzenstat: dzenstat.c
-	gcc ${CFLAGS} ${LFLAGS} -o ${NAME} dzenstat.c
+dzenstat: src/dzenstat.c
+	gcc ${CFLAGS} ${LFLAGS} -o ${NAME} src/dzenstat.c
 
-alsa: alsa.c
-	gcc ${CFLAGS} -lasound alsa.c
+alsa: tmp/alsa.c
+	gcc ${CFLAGS} -lasound tmp/alsa.c
 
-inotify: inotify.c
-	gcc ${CFLAGS} inotify.c
+inotify: tmp/inotify.c
+	gcc ${CFLAGS} tmp/inotify.c
 
-netmon: netmon.c
-	gcc ${CFLAGS} netmon.c
+netmon: tmp/netmon.c
+	gcc ${CFLAGS} tmp/netmon.c
 
-mpd: mpd.c
-	gcc ${CFLAGS} -lmpdclient mpd.c
+mpd: tmp/mpd.c
+	gcc ${CFLAGS} -lmpdclient tmp/mpd.c
+
+xorg: tmp/xorg.c
+	gcc ${CFLAGS} -lX11 tmp/xorg.c
 
