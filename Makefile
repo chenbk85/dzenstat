@@ -16,9 +16,3 @@ $(EXECUTABLE): $(OBJECTS)
 clean:
 	rm $(OBJECTS)
 
-mpd: tmp/mpd.c
-	gcc ${CFLAGS} -lmpdclient tmp/mpd.c
-
-xorg: tmp/xorg.c
-	gcc ${CFLAGS} -lX11 tmp/xorg.c
-

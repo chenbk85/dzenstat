@@ -16,3 +16,6 @@ netmon: netmon.c
 xorg: xorg.c
 	$(CC) $(CFLAGS) $? -lX11
 
+pthread: pthread.c
+	$(CC) $(CFLAGS) $? -lpthread
+
