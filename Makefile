@@ -1,6 +1,7 @@
 CC=gcc
-LDFLAGS=-lm -lasound
-CFLAGS=-Wall -Wpedantic -std=gnu99 -g
+LDLIBS=-lm -lasound
+LDFLAGS=
+CFLAGS=-DHOST_$(shell hostname) -Wall -Wpedantic -std=gnu99 -g
 SOURCES=$(wildcard src/*.c)
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=dzenstat
@@ -8,11 +9,11 @@ EXECUTABLE=dzenstat
 all: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
+	$(CC) $(LDLIBS) $(OBJECTS) -o $@
 
 .c.o:
 	$(CC) -c $(CFLAGS) $? -o $@
 
 clean:
-	rm $(OBJECTS)
+	rm -f $(OBJECTS)
 

@@ -13,6 +13,7 @@
 #include <regex.h>
 #include <signal.h>
 #include <sys/sysinfo.h>
+#include <sys/select.h>
 #include <alsa/asoundlib.h>
 
 /* network */
@@ -57,6 +58,13 @@ typedef struct {
 	char const *path;
 	struct sysinfo info;
 } Memory;
+
+typedef struct {
+	void (*init)(void);
+	void (*update)(void);
+	void (*term)(void);
+	char display[DISPLEN];
+} Token;
 
 typedef struct {
 	char name[BUFLEN];
