@@ -3,8 +3,31 @@
  */
 
 #include "dzenstat.h"
+#include "config.h"
 
-static void
+/* variables (TODO replace some by modules) */
+Battery bat;
+NetworkInterface *netifs[NUMIFS];
+int net_fd;
+struct sockaddr_nl net_sa;
+Memory mem;
+Sound snd;
+struct tm *date;
+struct timeval longdelay;
+time_t rawtime;
+bool interrupted;
+fd_set fds;
+
+/* displays & flags (TODO replace by module) */
+char batdisp[DISPLEN]; bool batflag = false;
+char memdisp[DISPLEN]; bool memflag = false;
+char netdisp[DISPLEN]; bool netflag = false;
+char snddisp[DISPLEN]; bool sndflag = false;
+
+/* seperator icons */
+char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
+
+void
 pollEvents(void)
 {
 	int s;
@@ -43,7 +66,7 @@ pollEvents(void)
 	}
 }
 
-static unsigned int
+unsigned int
 colour(int val)
 {
 	return (unsigned int)
@@ -52,18 +75,17 @@ colour(int val)
 	       51;
 }
 
-static void
+void
 die(void)
 {
 	exit(EXIT_FAILURE);
 }
 
-static void
+void
 display(void)
 {
 	while (!interrupted) {
 		updateBattery();
-		updateCPU();
 		updateDate();
 		updateMemory();
 		updateNetworkDisplay();
@@ -73,7 +95,6 @@ display(void)
 		/* flags */
 		printf("^fg(#%X)", colour_err);
 		if (batflag) printf("BAT|");
-		if (cpuflag) printf("CPU|");
 		if (memflag) printf("MEM|");
 		if (netflag) printf("NET|");
 		if (sndflag) printf("SND|");
@@ -83,8 +104,12 @@ display(void)
 		printf("%s", memdisp);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
-		/* CPU */
-		printf("%s", cpudisp);
+		/* CPU (TODO) */
+		if (modules[0].update() < 0) {
+			printf("CPU:ERROR");
+		} else {
+			printf("%s", modules[0].display);
+		}
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		/* network */
@@ -119,19 +144,23 @@ display(void)
 	}
 }
 
-static void
+void
 init(void)
 {
+	int i;
+
 	/* force line buffering */
 	setvbuf(stdout, NULL, _IOLBF, 1024);
 
-	/* initialise modules */
+	/* initialise modules (TODO switch to modules) */
 	initBattery();
-	initCPULoad();
-	initCPUTemp();
 	initMemory();
 	initNetwork();
 	initSound();
+
+	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+		modules[i].init(&modules[i]);
+	}
 
 	/* define separator icons */
 	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", path_icons);
@@ -144,7 +173,7 @@ init(void)
 	signal(SIGINT, sig_handle);
 }
 
-static void
+void
 initBattery(void)
 {
 	snprintf(bat.path_charge_now, BUFLEN, "%s/charge_now", path_bat);
@@ -156,60 +185,13 @@ initBattery(void)
 	snprintf(bat.path_status, BUFLEN, "%s/status", path_bat);
 }
 
-static void
-initCPULoad(void)
-{
-	int i;
-	FILE *f;
-	char buf[BUFLEN];
-	cpu.path_load = path_cpu_load;
-
-	/* check if file exists */
-	f = fopen(cpu.path_load, "r");
-	if (f == NULL) {
-		cpu.path_load = NULL;
-		return;
-	}
-
-	/* determine number of CPU cores */
-	for (i = 0;; ++i) {
-		fscanf(f, "%*[^\n]\n%s", buf);
-		if (strncmp(buf, "cpu", 3) != 0)
-			break;
-	}
-	cpu.num_cores = i;
-
-	/* create Core entities */
-	cpu.cores = malloc(cpu.num_cores * sizeof(Core *));
-	for (i = 0; i < cpu.num_cores; ++i)
-		cpu.cores[i] = malloc(sizeof(Core));
-}
-
-static void
-initCPUTemp(void)
-{
-	int i;
-	FILE *f;
-
-	/* determine temperature path */
-	cpu.path_temp = NULL;
-	for (i = 0; i < sizeof(path_cpu_temp); ++i) {
-		f = fopen(path_cpu_temp[i], "r");
-		if (f != NULL) {
-			fclose(f);
-			cpu.path_temp = path_cpu_temp[i];
-			break;
-		}
-	}
-}
-
-static void
+void
 initMemory(void)
 {
 	mem.path = path_mem;
 }
 
-static void
+void
 initNetwork(void)
 {
 	/* prepare fields */
@@ -225,7 +207,7 @@ initNetwork(void)
 	updateNetwork();
 }
 
-static void
+void
 initSound(void)
 {
 	/* new */
@@ -273,14 +255,14 @@ initSound(void)
 	updateSound();
 }
 
-static void
+void
 sig_handle(int sig)
 {
 	/* we greatfully complete a loop instead of heartlessly jumping out */
 	interrupted = true;
 }
 
-static void
+void
 updateBattery(void)
 {
 	FILE *f;
@@ -396,104 +378,14 @@ updateBattery(void)
 	}
 }
 
-static void
-updateCPU(void)
-{
-	int i;
-	char w[16], e[16];
-
-	/* prevent from updating too often */
-	LONGDELAY();
-	cpuflag = false;
-
-	updateCPULoad();
-	updateCPUTemp();
-
-	/* assemble output */
-	snprintf(w, 13, "^fg(#%X)", colour_warn);
-	snprintf(e, 13, "^fg(#%X)", colour_err);
-	cpudisp[0] = 0;
-	snprintf(cpudisp, DISPLEN, "^i(%s/glyph_cpu.xbm)  ^fg(#%X)",
-			path_icons, colour_hl);
-	for (i = 0; i < cpu.num_cores; i++)
-		snprintf(cpudisp+strlen(cpudisp), DISPLEN-strlen(cpudisp), "[%2d%%] ",
-				cpu.cores[i]->load);
-	snprintf(cpudisp+strlen(cpudisp), DISPLEN-strlen(cpudisp),
-			"^fg() %s%d%s°C",
-			cpu.temperature>=temp_crit ? e : cpu.temperature>=temp_high ? w:"",
-			cpu.temperature, cpu.temperature>=temp_high ? "^fg()" : "");
-}
-
-static void
-updateCPULoad(void)
-{
-	FILE *f;
-	int i;
-	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
-	int user, nice, system, idle, iowait, irq, softirq, steal, guest,guest_nice;
-
-	/* usage */
-	f = fopen(cpu.path_load, "r");
-	if (f == NULL) {
-		wrlog("Failed to open file: %s\n", cpu.path_load);
-		cpuflag = true;
-		return;
-	}
-	fscanf(f, "%*[^\n]\n"); /* ignore first line */
-	for (i = 0; i < cpu.num_cores; i++) {
-		fscanf(f, "%*[^ ] %d %d %d %d %d %d %d %d %d %d%*[^\n]\n",
-				&user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal,
-				&guest, &guest_nice);
-		if (ferror(f)) {
-			fclose(f);
-			wrlog("Failed to read file: %s\n", cpu.path_load);
-			cpuflag = true;
-			return;
-		}
-
-		/* calculate usage */
-		busy_tot = user+nice+system+irq+softirq+steal+guest+guest_nice;
-		busy_diff = busy_tot - cpu.cores[i]->busy_last;
-		idle_tot = idle + iowait;
-		idle_diff = idle_tot - cpu.cores[i]->idle_last;
-		usage = idle_diff + busy_diff;
-		cpu.cores[i]->load = (busy_diff*1000+5)/10/usage;
-		cpu.cores[i]->busy_last = busy_tot;
-		cpu.cores[i]->idle_last = idle_tot;
-	}
-	fclose(f);
-}
-
-static void
-updateCPUTemp(void)
-{
-	FILE *f;
-
-	f = fopen(cpu.path_temp, "r");
-	if (f == NULL) {
-		wrlog("Failed to open file: %s\n", cpu.path_temp);
-		cpuflag = true;
-		return;
-	}
-	fscanf(f, "%d", &(cpu.temperature));
-	if (ferror(f)) {
-		fclose(f);
-		wrlog("Failed to read file: %s\n", cpu.path_temp);
-		cpuflag = true;
-		return;
-	}
-	fclose(f);
-	cpu.temperature /= 1000;
-}
-
-static void
+void
 updateDate(void)
 {
 	time(&rawtime);
 	date = localtime(&rawtime);
 }
 
-static void
+void
 updateMemory(void)
 {
 	FILE *f;
@@ -529,7 +421,7 @@ updateMemory(void)
 			colour(100-mem.percentage), mem.used/1024.0);
 }
 
-static void
+void
 updateNetwork(void)
 {
 	struct ifreq ifr[NUMIFS];
@@ -598,7 +490,7 @@ updateNetwork(void)
 	updateNetworkDisplay();
 }
 
-static void
+void
 updateNetworkDisplay(void)
 {
 	FILE *f;
@@ -647,7 +539,7 @@ updateNetworkDisplay(void)
 	}
 }
 
-static void
+void
 updateSound(void)
 {
 	int s;
@@ -668,7 +560,7 @@ updateSound(void)
 				colour_ok, path_icons, snd.vol/34, colour_hl, snd.vol);
 }
 
-static void
+void
 wrlog(char const *format, ...)
 {
 	va_list args;

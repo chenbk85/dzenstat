@@ -32,7 +32,7 @@
 #define LONGDELAY() \
 		static clock_t next_update = 0; \
 		if (time(NULL) < next_update) return; \
-		next_update = time(NULL) + update_interval;
+		next_update = time(NULL) + update_interval
 
 /* TODO replace by module */
 typedef struct {
@@ -46,27 +46,13 @@ typedef struct {
 
 /* TODO replace by module */
 typedef struct {
-	int busy_last, idle_last;
-	int load;
-} Core;
-
-/* TODO replace by module */
-typedef struct {
-	char const *path_temp, *path_load;
-	int temperature;
-	Core **cores;
-	int num_cores;
-} CPU;
-
-/* TODO replace by module */
-typedef struct {
 	int used, total, percentage;
 	char const *path;
 	struct sysinfo info;
 } Memory;
 
-typedef struct {
-	int (*init)(Module *mod, char *disp);
+typedef struct Module {
+	int (*init)(struct Module *mod);
 	int (*update)(void);
 	int (*term)(void);
 	int fd;
@@ -81,8 +67,6 @@ typedef struct {
 	bool active;
 	int quality;
 } NetworkInterface;
-int net_fd;
-struct sockaddr_nl net_sa;
 
 /* TODO replace by module */
 typedef struct {
@@ -95,52 +79,23 @@ typedef struct {
 } Sound;
 
 /* function declarations (TODO replace some by modules) */
-static void pollEvents(void);
-static unsigned int colour(int val);
-static void die(void);
-static void display(void);
-static void init(void);
-static void initBattery(void);
-static void initCPULoad(void);
-static void initCPUTemp(void);
-static void initMemory(void);
-static void initNetwork(void);
-static void initSound(void);
-static void sig_handle(int sig);
-static void updateBattery(void);
-static void updateCPU(void);
-static void updateCPULoad(void);
-static void updateCPUTemp(void);
-static void updateDate(void);
-static void updateMemory(void);
-static void updateNetwork(void);
-static void updateNetworkDisplay(void);
-static void updateSound(void);
-static void wrlog(char const *format, ...);
-
-/* variables (TODO replace some by modules) */
-static Battery bat;
-static CPU cpu;
-static NetworkInterface *netifs[NUMIFS];
-static Memory mem;
-static Sound snd;
-static struct tm *date;
-static struct timeval longdelay;
-static time_t rawtime;
-static bool interrupted;
-static fd_set fds;
-
-/* displays & flags (TODO replace by module) */
-static char batdisp[DISPLEN]; static bool batflag = false;
-static char cpudisp[DISPLEN]; static bool cpuflag = false;
-static char memdisp[DISPLEN]; static bool memflag = false;
-static char netdisp[DISPLEN]; static bool netflag = false;
-static char snddisp[DISPLEN]; static bool sndflag = false;
-
-/* seperator icons */
-static char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
-
-/* load user configuration */
-#include "config.h"
+void pollEvents(void);
+unsigned int colour(int val);
+void die(void);
+void display(void);
+void init(void);
+void initBattery(void);
+void initMemory(void);
+void initNetwork(void);
+void initSound(void);
+void sig_handle(int sig);
+void updateBattery(void);
+void updateDate(void);
+void updateMemory(void);
+void updateNetwork(void);
+void updateNetworkDisplay(void);
+void updateSound(void);
+void wrlog(char const *format, ...);
 
 #endif
+

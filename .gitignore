@@ -1,15 +1,6 @@
 dzenstat
 valgrind.log
 *.swp
-gnugen/*.pdf
-gnugen/*.log
-gnugen/*.aux
-gnugen/*.nav
-gnugen/*.out
-gnugen/*.snm
-gnugen/*.toc
-gnugen/*.vrb
-src/*.o
-tmp/a.out
-tmp/mpd_conky
+*.o
+*a.out
 

@@ -14,6 +14,9 @@ $(EXECUTABLE): $(OBJECTS)
 .c.o:
 	$(CC) -c $(CFLAGS) $? -o $@
 
+purge: clean
+	rm -f $(EXECUTABLE)
+
 clean:
 	rm -f $(OBJECTS)
 
