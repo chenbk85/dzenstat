@@ -17,7 +17,6 @@ main(int argc, char **argv)
 	fd_set fds;
 	struct mpd_song *song;
 	struct mpd_status *status;
-	FILE *f;
 	char title[BUFLEN], artist[BUFLEN], album[BUFLEN];
 	enum mpd_state state;
 
@@ -84,20 +83,16 @@ main(int argc, char **argv)
 			}
 		}
 
-		/* write to file (for conky) */
-		f = fopen("mpd_conky", "w+");
-		if (f == NULL) {
-			fprintf(stderr, "failed to open conky file: %s\n", strerror(errno));
-			return EXIT_FAILURE;
-		}
-		fprintf(f, "${color AAAA55}${font Gill Sans:weight=normal:size=18}"
-		           "%s$font$color\n", title);
-		fprintf(f, "%s\n", artist);
-		fprintf(f, "${font Gill Sans:weight=thin:size=18:slant=italic}"
-		           "%s$font\n", album);
-		fprintf(f, "${image /home/ayekat/.config/conky/img/%s.jpg -n"
-		           "-s 100x100}\n", album);
-		fclose(f);
+		/* output */
+		printf("Title:  %s\n"
+		       "Artist: %s\n"
+		       "Album:  %s\n"
+		       "State:  %s\n"
+		       "---\n",
+		       title, artist, album,
+		       state == MPD_STATE_PLAY ? "playing" :
+		       state == MPD_STATE_PAUSE ? "paused" :
+		       state == MPD_STATE_STOP ? "stopped" : "unknown");
 	}
 
 	/* never reached (MUAHAHA!) */
