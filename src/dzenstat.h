@@ -36,16 +36,6 @@
 
 /* TODO replace by module */
 typedef struct {
-	char path_charge_now[BUFLEN], path_charge_full[BUFLEN],
-	     path_charge_full_design[BUFLEN], path_current_now[BUFLEN],
-	     path_capacity[BUFLEN], path_status[BUFLEN];
-	int h, m, s;
-	int charge_now, charge_full, charge_full_design, current_now, capacity;
-	bool discharging;
-} Battery;
-
-/* TODO replace by module */
-typedef struct {
 	int used, total, percentage;
 	char const *path;
 	struct sysinfo info;
@@ -84,12 +74,10 @@ unsigned int colour(int val);
 void die(void);
 void display(void);
 void init(void);
-void initBattery(void);
 void initMemory(void);
 void initNetwork(void);
 void initSound(void);
 void sig_handle(int sig);
-void updateBattery(void);
 void updateDate(void);
 void updateMemory(void);
 void updateNetwork(void);

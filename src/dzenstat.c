@@ -3,10 +3,9 @@
  */
 
 #include "dzenstat.h"
-#include "config.h"
+#include "modules.h"
 
 /* variables (TODO replace some by modules) */
-Battery bat;
 NetworkInterface *netifs[NUMIFS];
 int net_fd;
 struct sockaddr_nl net_sa;
@@ -85,7 +84,6 @@ void
 display(void)
 {
 	while (!interrupted) {
-		updateBattery();
 		updateDate();
 		updateMemory();
 		updateNetworkDisplay();
@@ -94,7 +92,6 @@ display(void)
 
 		/* flags */
 		printf("^fg(#%X)", colour_err);
-		if (batflag) printf("BAT|");
 		if (memflag) printf("MEM|");
 		if (netflag) printf("NET|");
 		if (sndflag) printf("SND|");
@@ -105,18 +102,20 @@ display(void)
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		/* CPU (TODO) */
-		if (modules[0].update() < 0) {
+		if (modules[0].update() < 0)
 			printf("CPU:ERROR");
-		} else {
+		else
 			printf("%s", modules[0].display);
-		}
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		/* network */
 		printf("%s", netdisp);
 
-		/* battery */
-		printf("%s", batdisp);
+		/* battery (TODO) */
+		if (modules[1].update() < 0)
+			printf("BATTERY:ERROR");
+		else
+			printf("%s", modules[1].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 
 		/* volume */
@@ -153,7 +152,6 @@ init(void)
 	setvbuf(stdout, NULL, _IOLBF, 1024);
 
 	/* initialise modules (TODO switch to modules) */
-	initBattery();
 	initMemory();
 	initNetwork();
 	initSound();
@@ -171,18 +169,6 @@ init(void)
 	/* register signal handler */
 	signal(SIGTERM, sig_handle);
 	signal(SIGINT, sig_handle);
-}
-
-void
-initBattery(void)
-{
-	snprintf(bat.path_charge_now, BUFLEN, "%s/charge_now", path_bat);
-	snprintf(bat.path_charge_full, BUFLEN, "%s/charge_full", path_bat);
-	snprintf(bat.path_charge_full_design, BUFLEN, "%s/charge_full_design",
-			path_bat);
-	snprintf(bat.path_current_now, BUFLEN, "%s/current_now", path_bat);
-	snprintf(bat.path_capacity, BUFLEN, "%s/capacity", path_bat);
-	snprintf(bat.path_status, BUFLEN, "%s/status", path_bat);
 }
 
 void
@@ -260,122 +246,6 @@ sig_handle(int sig)
 {
 	/* we greatfully complete a loop instead of heartlessly jumping out */
 	interrupted = true;
-}
-
-void
-updateBattery(void)
-{
-	FILE *f;
-	double hours;
-
-	/* prevent from updating too often */
-	LONGDELAY();
-	batflag = false;
-
-	/* battery state */
-	f = fopen(bat.path_status, "r");
-	if (f == NULL) {
-		wrlog("Failed to open file: %s\n", bat.path_status);
-		batflag = true;
-		return;
-	}
-	bat.discharging = (fgetc(f) == 'D');
-	fclose(f);
-
-	/* get current charge if discharging or calculating from design capacity */
-	if (use_acpi_real_capacity || bat.discharging) {
-		f = fopen(bat.path_charge_now, "r");
-		if (f == NULL) {
-			wrlog("Failed to open file: %s\n", bat.path_charge_now);
-			batflag = true;
-			return;
-		}
-		fscanf(f, "%d", &bat.charge_now);
-		if (ferror(f)) {
-			fclose(f);
-			wrlog("Failed to read file: %s\n", bat.path_charge_now);
-			batflag = true;
-			return;
-		}
-		fclose(f);
-	}
-
-	/* calculate from design capacity */
-	if (use_acpi_real_capacity) {
-		/* full charge */
-		f = fopen(bat.path_charge_full_design, "r");
-		if (f == NULL) {
-			wrlog("Failed to open file: %s\n", bat.path_charge_full_design);
-			batflag = true;
-			return;
-		}
-		fscanf(f, "%d", &bat.charge_full_design);
-		if (ferror(f)) {
-			fclose(f);
-			wrlog("Failed to read file: %s\n", bat.path_charge_now);
-			batflag = true;
-			return;
-		}
-		fclose(f);
-
-		/* charge percentage left */
-		bat.capacity = 100 * bat.charge_now / bat.charge_full_design;
-	}
-	
-	/* calculate from current capacity */
-	else {
-		f = fopen(bat.path_capacity, "r");
-		if (f == NULL) {
-			wrlog("Failed to open file: %s\n", bat.path_capacity);
-			batflag = true;
-			return;
-		}
-		fscanf(f, "%d", &bat.capacity);
-		if (ferror(f)) {
-			wrlog("Failed to read file: %s\n", bat.path_capacity);
-			batflag = true;
-			fclose(f);
-			return;
-		}
-		fclose(f);
-	}
-
-	/* calculate time left (if not charging) */
-	if (bat.discharging) {
-		/* usage */
-		f = fopen(bat.path_current_now, "r");
-		if (f == NULL) {
-			wrlog("Failed to open file: %s\n", bat.path_current_now);
-			batflag = true;
-			return;
-		}
-		fscanf(f, "%d", &bat.current_now);
-		if (ferror(f)) {
-			fclose(f);
-			wrlog("Failed to read file: %s\n", bat.path_current_now);
-			batflag = true;
-			return;
-		}
-		fclose(f);
-
-		/* time left */
-		hours = (double) bat.charge_now / (double) bat.current_now;
-		bat.h = (int) hours;
-		bat.m = (int) (fmod(hours, 1) * 60);
-		bat.s = (int) (fmod((fmod(hours, 1) * 60), 1) * 60);
-	}
-
-	/* assemble output */
-	if (!bat.discharging) {
-		snprintf(batdisp, DISPLEN,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
-				colour_bat, bat.capacity, path_icons, bat.capacity/10*10);
-	} else {
-		snprintf(batdisp, DISPLEN,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%X)%dh %02dm %02ds^fg()",
-				colour(bat.capacity), bat.capacity, path_icons,
-				bat.capacity/10*10, colour_hl, bat.h, bat.m, bat.s);
-	}
 }
 
 void

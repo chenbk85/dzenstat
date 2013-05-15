@@ -2,8 +2,8 @@
  */
 
 #include "cpu.h"
-#include "config.h"
-#include "modconf/cpu.h"
+#include "config/global.h"
+#include "config/cpu.h"
 #include <time.h>
 #include <stdio.h>
 
@@ -19,8 +19,8 @@ static char *dy;
 
 static int temperature;
 
-int cpu_update(void);
-int cpu_term(void);
+static int cpu_update(void);
+static int cpu_term(void);
 
 int
 cpu_init(Module *mod)
@@ -68,7 +68,7 @@ cpu_init(Module *mod)
 	return 0;
 }
 
-int
+static int
 cpu_update(void)
 {
 	FILE *f;
@@ -144,7 +144,7 @@ cpu_update(void)
 	return 0;
 }
 
-int
+static int
 cpu_term(void)
 {
 	/* TODO */

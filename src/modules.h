@@ -10,7 +10,6 @@
  */
 
 /* paths */
-static char const *path_bat = "/sys/class/power_supply/BAT1"; /* battery */
 static char const *path_mem = "/proc/meminfo";                /* memory (RAM) */
 
 
@@ -20,9 +19,11 @@ static char const *path_mem = "/proc/meminfo";                /* memory (RAM) */
  */
 
 #include "cpu.h"
+#include "battery.h"
 
 static Module modules[] = {
 	{ .init = cpu_init },
+	{ .init = battery_init },
 };
 
 
@@ -32,7 +33,6 @@ static Module modules[] = {
  */
 
 /* use design capacity for calculating percentage? */
-static bool const use_acpi_real_capacity = true;
 
 /* delay in seconds for battery/CPU update */
 #define update_interval 2
