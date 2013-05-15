@@ -9,7 +9,6 @@
 NetworkInterface *netifs[NUMIFS];
 int net_fd;
 struct sockaddr_nl net_sa;
-Memory mem;
 Sound snd;
 struct tm *date;
 struct timeval longdelay;
@@ -18,8 +17,6 @@ bool interrupted;
 fd_set fds;
 
 /* displays & flags (TODO replace by module) */
-char batdisp[DISPLEN]; bool batflag = false;
-char memdisp[DISPLEN]; bool memflag = false;
 char netdisp[DISPLEN]; bool netflag = false;
 char snddisp[DISPLEN]; bool sndflag = false;
 
@@ -85,37 +82,38 @@ display(void)
 {
 	while (!interrupted) {
 		updateDate();
-		updateMemory();
 		updateNetworkDisplay();
 
 		pollEvents();
 
 		/* flags */
 		printf("^fg(#%X)", colour_err);
-		if (memflag) printf("MEM|");
 		if (netflag) printf("NET|");
 		if (sndflag) printf("SND|");
 		printf("^fg()   ");
 
-		/* memory */
-		printf("%s", memdisp);
+		/* memory (TODO) */
+		if (modules[0].update() < 0)
+			printf("RAM:ERROR");
+		else
+			printf("%s", modules[0].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		/* CPU (TODO) */
-		if (modules[0].update() < 0)
+		if (modules[1].update() < 0)
 			printf("CPU:ERROR");
 		else
-			printf("%s", modules[0].display);
+			printf("%s", modules[1].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
 		/* network */
 		printf("%s", netdisp);
 
 		/* battery (TODO) */
-		if (modules[1].update() < 0)
+		if (modules[2].update() < 0)
 			printf("BATTERY:ERROR");
 		else
-			printf("%s", modules[1].display);
+			printf("%s", modules[2].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 
 		/* volume */
@@ -152,7 +150,6 @@ init(void)
 	setvbuf(stdout, NULL, _IOLBF, 1024);
 
 	/* initialise modules (TODO switch to modules) */
-	initMemory();
 	initNetwork();
 	initSound();
 
@@ -169,12 +166,6 @@ init(void)
 	/* register signal handler */
 	signal(SIGTERM, sig_handle);
 	signal(SIGINT, sig_handle);
-}
-
-void
-initMemory(void)
-{
-	mem.path = path_mem;
 }
 
 void
@@ -253,42 +244,6 @@ updateDate(void)
 {
 	time(&rawtime);
 	date = localtime(&rawtime);
-}
-
-void
-updateMemory(void)
-{
-	FILE *f;
-	int i;
-
-	/* prevent from updating too often */
-	LONGDELAY();
-	memflag = false;
-
-	/* open file */
-	f = fopen(mem.path, "r");
-	if (f == NULL) {
-		wrlog("Could not open file: %s\n", mem.path);
-		memflag = true;
-		return;
-	}
-
-	/* calculate */
-	fscanf(f, "MemTotal: %d kB\n", &mem.total);
-	fscanf(f, "MemFree: %d kB\n", &i);
-	mem.used = mem.total-i;
-	fscanf(f, "Buffers: %d kB\n", &i);
-	mem.used -= i;
-	fscanf(f, "Cached: %d kB\n", &i);
-	mem.used -= i;
-	mem.percentage = mem.used*100 / mem.total;
-	fclose(f);
-
-	/* update display */
-	snprintf(memdisp, DISPLEN,
-			"RAM:  ^fg(#%X)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
-			colour_hl, mem.percentage,
-			colour(100-mem.percentage), mem.used/1024.0);
 }
 
 void

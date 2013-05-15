@@ -4,24 +4,18 @@
 #ifndef DZENSTAT_CONFIG_H
 #define DZENSTAT_CONFIG_H
 
-/* SYSTEM ----------------------------------------------------------------------
- * These variables determine where to look for system information and how to
- * handle them.
- */
-
-/* paths */
-static char const *path_mem = "/proc/meminfo";                /* memory (RAM) */
-
 
 /* MODULES ---------------------------------------------------------------------
  * Include modules to be loaded and define the order in which they shall appear
  * in the bar.
  */
 
+#include "memory.h"
 #include "cpu.h"
 #include "battery.h"
 
 static Module modules[] = {
+	{ .init = memory_init },
 	{ .init = cpu_init },
 	{ .init = battery_init },
 };

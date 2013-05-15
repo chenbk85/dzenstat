@@ -34,13 +34,6 @@
 		if (time(NULL) < next_update) return; \
 		next_update = time(NULL) + update_interval
 
-/* TODO replace by module */
-typedef struct {
-	int used, total, percentage;
-	char const *path;
-	struct sysinfo info;
-} Memory;
-
 typedef struct Module {
 	int (*init)(struct Module *mod);
 	int (*update)(void);
@@ -74,12 +67,10 @@ unsigned int colour(int val);
 void die(void);
 void display(void);
 void init(void);
-void initMemory(void);
 void initNetwork(void);
 void initSound(void);
 void sig_handle(int sig);
 void updateDate(void);
-void updateMemory(void);
 void updateNetwork(void);
 void updateNetworkDisplay(void);
 void updateSound(void);
