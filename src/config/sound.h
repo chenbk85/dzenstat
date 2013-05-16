@@ -1,0 +1,2 @@
+/* Configuration file for dzenstat sound module.
+ */

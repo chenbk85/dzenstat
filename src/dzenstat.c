@@ -9,7 +9,6 @@
 NetworkInterface *netifs[NUMIFS];
 int net_fd;
 struct sockaddr_nl net_sa;
-Sound snd;
 struct tm *date;
 struct timeval longdelay;
 time_t rawtime;
@@ -31,35 +30,37 @@ pollEvents(void)
 	struct iovec iov = { buf, sizeof(buf) };
 	struct msghdr msg = { &net_sa, sizeof(net_sa), &iov, 1, NULL, 0, 0 };
 
-	/* add file_descriptors */
-	FD_ZERO(&fds);
-	FD_SET(snd.fd, &fds);
-	FD_SET(net_fd, &fds);
-
-	/* wait for activity */
 	longdelay.tv_sec = 1;
 	longdelay.tv_usec = 0;  /* 450000 µs = 450 ms = 0.45 s */
-	s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
 
-	/* handle return value */
-	if (s < 0)  /* error */
-		return;
-	if (!s)     /* timeout */
-		return;
+	/*do {*/
+		/* add file_descriptors */
+		FD_ZERO(&fds);
+		FD_SET(modules[3].fd, &fds);
+		FD_SET(net_fd, &fds);
 
-	/* network */
-	if (FD_ISSET(net_fd, &fds)) {
-		/* clear data in buffer */
-		recvmsg(net_fd, &msg, 0);
-		updateNetwork();
-	}
+		/* wait for activity */
+		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
 
-	/* sound */
-	if (FD_ISSET(snd.fd, &fds)) {
-		/* clear data in buffer */
-		snd_mixer_handle_events(snd.ctl);
-		updateSound();
-	}
+		/* handle return value */
+		if (s < 0)  /* error */
+			return;
+		if (!s)     /* timeout */
+			return;
+
+		/* network */
+		if (FD_ISSET(net_fd, &fds)) {
+			/* clear data in buffer */
+			recvmsg(net_fd, &msg, 0);
+			updateNetwork();
+		}
+
+		/* sound */
+		if (FD_ISSET(modules[3].fd, &fds)) {
+			/* clear data in buffer */
+			modules[3].update();
+		}
+	/*} while (s > 0);*/
 }
 
 unsigned int
@@ -111,12 +112,13 @@ display(void)
 
 		/* battery (TODO) */
 		if (modules[2].update() < 0)
-			printf("BATTERY:ERROR");
+			printf("BAT:ERROR");
 		else
 			printf("%s", modules[2].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 
 		/* volume */
+		printf("%s", modules[3].display);
 		printf("%s", snddisp);
 		printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
@@ -151,7 +153,6 @@ init(void)
 
 	/* initialise modules (TODO switch to modules) */
 	initNetwork();
-	initSound();
 
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].init(&modules[i]);
@@ -182,54 +183,6 @@ initNetwork(void)
 
 	/* initial update */
 	updateNetwork();
-}
-
-void
-initSound(void)
-{
-	/* new */
-	int ret = 0;
-	snd_mixer_selem_id_t *sid;
-	char const *card = "default";
-	struct pollfd pfd;
-
-	/* new */
-
-	/* set up control interface */
-	ret += snd_mixer_open(&snd.ctl, 0);
-	ret += snd_mixer_attach(snd.ctl, card);
-	ret += snd_mixer_selem_register(snd.ctl, NULL, NULL);
-	ret += snd_mixer_load(snd.ctl);
-	if (ret < 0) {
-		wrlog("ALSA: Could not open mixer\n");
-		die();
-	}
-
-	/* get mixer element */
-	snd_mixer_selem_id_alloca(&sid);
-	snd_mixer_selem_id_set_index(sid, 0);
-	snd_mixer_selem_id_set_name(sid, "Master");
-	snd.elem = snd_mixer_find_selem(snd.ctl, sid);
-	if (snd.elem == NULL) {
-		wrlog("ALSA: Could not get mixer element\n");
-		snd_mixer_detach(snd.ctl, card);
-		snd_mixer_close(snd.ctl);
-		die();
-	}
-
-	/* get poll file descriptor */
-	if (snd_mixer_poll_descriptors(snd.ctl, &pfd, 1)) {
-		snd.fd = pfd.fd;
-	} else {
-		wrlog("ALSA: Could not get file descriptor\n");
-		die();
-	}
-
-	/* get volume range */
-	snd_mixer_selem_get_playback_volume_range(snd.elem, &snd.min, &snd.max);
-
-	/* initial update */
-	updateSound();
 }
 
 void
@@ -362,27 +315,6 @@ updateNetworkDisplay(void)
 				netifs[i]->active ? colour_hl : colour_err,
 				netifs[i]->ip, colour_sep, lsep);
 	}
-}
-
-void
-updateSound(void)
-{
-	int s;
-	long l, r;
-
-	snd_mixer_selem_get_playback_volume(snd.elem,SND_MIXER_SCHN_FRONT_LEFT,&l);
-	snd_mixer_selem_get_playback_volume(snd.elem,SND_MIXER_SCHN_FRONT_RIGHT,&r);
-	snd_mixer_selem_get_playback_switch(snd.elem,SND_MIXER_SCHN_FRONT_LEFT,&s);
-	snd.vol = (l+r)*50/snd.max;
-	snd.mute = s == 0;
-
-	if (snd.mute)
-		snprintf(snddisp, DISPLEN, "^fg(#%X)^i(%s/volume_m.xbm)  ^fg()%2ld%%",
-				colour_err, path_icons, snd.vol);
-	else
-		snprintf(snddisp, DISPLEN,
-				"^fg(#%X)^i(%s/volume_%ld.xbm) ^fg(#%X)%2ld%%^fg()",
-				colour_ok, path_icons, snd.vol/34, colour_hl, snd.vol);
 }
 
 void

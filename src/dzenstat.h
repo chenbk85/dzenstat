@@ -38,8 +38,9 @@ typedef struct Module {
 	int (*init)(struct Module *mod);
 	int (*update)(void);
 	int (*term)(void);
+	bool ignore;
+	bool has_fd;
 	int fd;
-	bool is_fd;
 	char display[DISPLEN];
 } Module;
 
@@ -51,16 +52,6 @@ typedef struct {
 	int quality;
 } NetworkInterface;
 
-/* TODO replace by module */
-typedef struct {
-	long min, max, vol;
-	bool mute;
-	char const* path;
-	int fd;
-	snd_mixer_t *ctl;
-	snd_mixer_elem_t *elem;
-} Sound;
-
 /* function declarations (TODO replace some by modules) */
 void pollEvents(void);
 unsigned int colour(int val);
@@ -68,12 +59,10 @@ void die(void);
 void display(void);
 void init(void);
 void initNetwork(void);
-void initSound(void);
 void sig_handle(int sig);
 void updateDate(void);
 void updateNetwork(void);
 void updateNetworkDisplay(void);
-void updateSound(void);
 void wrlog(char const *format, ...);
 
 #endif
