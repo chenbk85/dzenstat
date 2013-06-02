@@ -37,6 +37,7 @@
 typedef struct Module {
 	int (*init)(struct Module *mod);
 	int (*update)(void);
+	int (*interrupt)(void);
 	int (*term)(void);
 	bool ignore;
 	bool has_fd;

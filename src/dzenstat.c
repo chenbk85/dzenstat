@@ -17,7 +17,6 @@ fd_set fds;
 
 /* displays & flags (TODO replace by module) */
 char netdisp[DISPLEN]; bool netflag = false;
-char snddisp[DISPLEN]; bool sndflag = false;
 
 /* seperator icons */
 char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
@@ -57,8 +56,7 @@ pollEvents(void)
 
 		/* sound */
 		if (FD_ISSET(modules[3].fd, &fds)) {
-			/* clear data in buffer */
-			modules[3].update();
+			modules[3].interrupt();
 		}
 	/*} while (s > 0);*/
 }
@@ -90,7 +88,6 @@ display(void)
 		/* flags */
 		printf("^fg(#%X)", colour_err);
 		if (netflag) printf("NET|");
-		if (sndflag) printf("SND|");
 		printf("^fg()   ");
 
 		/* memory (TODO) */
@@ -119,7 +116,6 @@ display(void)
 
 		/* volume */
 		printf("%s", modules[3].display);
-		printf("%s", snddisp);
 		printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 

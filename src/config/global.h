@@ -6,7 +6,7 @@
 
 /* interval for polling */
 
-#define update_interval 2
+#define update_interval 3
 
 /* icons location */
 

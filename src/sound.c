@@ -2,7 +2,7 @@
 #include "config/global.h"
 #include "config/sound.h"
 
-static int update(void);
+static int interrupt(void);
 static int term(void);
 static char *dy;
 
@@ -19,7 +19,7 @@ sound_init(Module *mod)
 	char const *card = "default";
 	struct pollfd pfd;
 
-	mod->update = update;
+	mod->interrupt = interrupt;
 	mod->term = term;
 	dy = mod->display;
 	mod->ignore = true; /* don't update periodically */
@@ -59,13 +59,13 @@ sound_init(Module *mod)
 	snd_mixer_selem_get_playback_volume_range(elem, &min, &max);
 
 	/* initial update */
-	update();
+	interrupt();
 
 	return 0;
 }
 
 static int
-update(void)
+interrupt(void)
 {
 	int s;
 	long l, r;
