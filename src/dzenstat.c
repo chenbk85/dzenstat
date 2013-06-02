@@ -3,20 +3,15 @@
  */
 
 #include "dzenstat.h"
+#include "config/global.h"
 #include "modules.h"
 
 /* variables (TODO replace some by modules) */
-NetworkInterface *netifs[NUMIFS];
-int net_fd;
-struct sockaddr_nl net_sa;
 struct tm *date;
 struct timeval longdelay;
 time_t rawtime;
 bool interrupted;
 fd_set fds;
-
-/* displays & flags (TODO replace by module) */
-char netdisp[DISPLEN]; bool netflag = false;
 
 /* seperator icons */
 char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
@@ -25,18 +20,15 @@ void
 pollEvents(void)
 {
 	int s;
-	char buf[4096];
-	struct iovec iov = { buf, sizeof(buf) };
-	struct msghdr msg = { &net_sa, sizeof(net_sa), &iov, 1, NULL, 0, 0 };
 
-	longdelay.tv_sec = 1;
-	longdelay.tv_usec = 0;  /* 450000 µs = 450 ms = 0.45 s */
+	longdelay.tv_sec = 0;
+	longdelay.tv_usec = 900000;  /* 900000 µs = 900 ms = 0.9 s */
 
-	/*do {*/
+	do {
 		/* add file_descriptors */
 		FD_ZERO(&fds);
-		FD_SET(modules[3].fd, &fds);
-		FD_SET(net_fd, &fds);
+		FD_SET(modules[4].fd, &fds);
+		FD_SET(modules[2].fd, &fds);
 
 		/* wait for activity */
 		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
@@ -48,17 +40,17 @@ pollEvents(void)
 			return;
 
 		/* network */
-		if (FD_ISSET(net_fd, &fds)) {
+		if (FD_ISSET(modules[2].fd, &fds)) {
 			/* clear data in buffer */
-			recvmsg(net_fd, &msg, 0);
-			updateNetwork();
+			modules[2].interrupt();
 		}
 
 		/* sound */
-		if (FD_ISSET(modules[3].fd, &fds)) {
-			modules[3].interrupt();
+		if (FD_ISSET(modules[4].fd, &fds)) {
+			modules[4].interrupt();
 		}
-	/*} while (s > 0);*/
+
+	} while (longdelay.tv_usec > 0);
 }
 
 unsigned int
@@ -81,41 +73,33 @@ display(void)
 {
 	while (!interrupted) {
 		updateDate();
-		updateNetworkDisplay();
-
 		pollEvents();
 
-		/* flags */
-		printf("^fg(#%X)", colour_err);
-		if (netflag) printf("NET|");
-		printf("^fg()   ");
-
-		/* memory (TODO) */
 		if (modules[0].update() < 0)
 			printf("RAM:ERROR");
 		else
 			printf("%s", modules[0].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
-		/* CPU (TODO) */
 		if (modules[1].update() < 0)
 			printf("CPU:ERROR");
 		else
 			printf("%s", modules[1].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
 
-		/* network */
-		printf("%s", netdisp);
-
-		/* battery (TODO) */
 		if (modules[2].update() < 0)
-			printf("BAT:ERROR");
+			printf("NET:ERROR");
 		else
 			printf("%s", modules[2].display);
+		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
+
+		if (modules[3].update() < 0)
+			printf("BAT:ERROR");
+		else
+			printf("%s", modules[3].display);
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 
-		/* volume */
-		printf("%s", modules[3].display);
+		printf("%s", modules[4].display);
 		printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 
@@ -147,9 +131,6 @@ init(void)
 	/* force line buffering */
 	setvbuf(stdout, NULL, _IOLBF, 1024);
 
-	/* initialise modules (TODO switch to modules) */
-	initNetwork();
-
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].init(&modules[i]);
 	}
@@ -166,22 +147,6 @@ init(void)
 }
 
 void
-initNetwork(void)
-{
-	/* prepare fields */
-	memset(&net_sa, 0, sizeof(net_sa));
-	net_sa.nl_family = AF_NETLINK;
-	net_sa.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR; /*TODO up/down events*/
-
-	/* get file descriptor */
-	net_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-	bind(net_fd, (struct sockaddr *) &net_sa, sizeof(net_sa));
-
-	/* initial update */
-	updateNetwork();
-}
-
-void
 sig_handle(int sig)
 {
 	/* we greatfully complete a loop instead of heartlessly jumping out */
@@ -193,124 +158,6 @@ updateDate(void)
 {
 	time(&rawtime);
 	date = localtime(&rawtime);
-}
-
-void
-updateNetwork(void)
-{
-	struct ifreq ifr[NUMIFS];
-	struct ifconf ifc;
-	int sd, i, j=0, ifnum, addr;
-
-	/* prevent from updating too often */
-	LONGDELAY();
-	netflag = false;
-
-	/* clear old interfaces */
-	for (i = 0; i < NUMIFS; ++i)
-		if (netifs[i]) {
-			free(netifs[i]);
-			netifs[i] = NULL;
-		}
-
-	/* create a socket where we can use ioctl to retrieve interface info */
-	sd = socket(PF_INET, SOCK_DGRAM, 0);
-	if (sd <= 0) {
-		wrlog("Failed: socket(PF_INET, SOCK_DGRAM, 0)\n");
-		netflag = true;
-		return;
-	}
-
-	/* set pointer and maximum space (???) */
-	ifc.ifc_len = sizeof(ifr);
-	ifc.ifc_ifcu.ifcu_buf = (caddr_t) ifr;
-
-	/* get interface info from the socket created above */
-	if (ioctl(sd, SIOCGIFCONF, &ifc) != 0) {
-		wrlog("Failed: ioctl(sd, SIOCGIFCONF, &ifc)\n");
-		netflag = true;
-		close(sd);
-		return;
-	}
-	
-	/* get number of found interfaces */
-	ifnum = ifc.ifc_len / sizeof(struct ifreq);
-
-	for (i = 0; i < ifnum; ++i) {
-		if (ifr[i].ifr_addr.sa_family != AF_INET)
-			continue;
-
-		if (!ioctl(sd, SIOCGIFADDR, &ifr[i]) && strcmp(ifr[i].ifr_name, "lo")) {
-			/* create a new NetworkInterface to assign information to it */
-			netifs[j] = malloc(sizeof(NetworkInterface));
-
-			/* name */
-			snprintf(netifs[j]->name, BUFLEN-1, "%s", ifr[i].ifr_name);
-
-			/* address */
-			addr = ((struct sockaddr_in *) (&ifr[i].ifr_addr))->sin_addr.s_addr;
-			snprintf(netifs[j]->ip, BUFLEN-1, "%d.%d.%d.%d",
-					 addr      & 0xFF, (addr>> 8) & 0xFF,
-					(addr>>16) & 0xFF, (addr>>24) & 0xFF);
-
-			/* state (UP/DOWN) */
-			netifs[j]->active = (!ioctl(sd, SIOCGIFFLAGS, &ifr[i]) &&
-					ifr[i].ifr_flags | IFF_UP);
-			++j;
-		}
-	}
-	close(sd);
-
-	updateNetworkDisplay();
-}
-
-void
-updateNetworkDisplay(void)
-{
-	FILE *f;
-	int i;
-
-	/* prevent from updating too often */
-	LONGDELAY();
-	netflag = false;
-
-	netdisp[0] = 0;
-	for (i = 0; i < NUMIFS; ++i) {
-		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
-			continue;
-		if (!strcmp(netifs[i]->name, "wlan0")) {
-			/* quality (if wlan) */
-			if (!strcmp(netifs[i]->name, "wlan0")) {
-				f = fopen("/proc/net/wireless", "r");
-				if (f == NULL) {
-					wrlog("Failed to open file: /proc/net/wireless\n");
-					netflag = true;
-					return;
-				}
-				fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
-						&netifs[i]->quality);
-				if (ferror(f)) {
-					fclose(f);
-					wrlog("Failed to open file: /proc/net/wireless\n");
-					netflag = true;
-					fclose(f);
-					return;
-				}
-				fclose(f);
-			}
-			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
-					"^fg(#%X)^i(%s/glyph_wifi_%d.xbm)^fg()",
-					colour(netifs[i]->quality), path_icons,
-					netifs[i]->quality/20);
-		}
-		if (!strcmp(netifs[i]->name, "eth0"))
-			snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
-					"^i(%s/glyph_eth.xbm)", path_icons);
-		snprintf(netdisp+strlen(netdisp), DISPLEN-strlen(netdisp),
-				"  ^fg(#%X)%s^fg()   ^fg(#%X)%s^fg()   ",
-				netifs[i]->active ? colour_hl : colour_err,
-				netifs[i]->ip, colour_sep, lsep);
-	}
 }
 
 void

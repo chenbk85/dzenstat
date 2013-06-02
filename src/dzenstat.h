@@ -25,7 +25,6 @@
 #include <net/if.h>
 #include <linux/rtnetlink.h> /* sockaddr_nl */
 
-#define NUMIFS 10       /* maximum number of network interfaces */
 #define BUFLEN 128      /* length for buffers */
 #define DISPLEN 512     /* length for display buffers (a little longer) */
 
@@ -44,14 +43,6 @@ typedef struct Module {
 	int fd;
 	char display[DISPLEN];
 } Module;
-
-/* TODO replace by module */
-typedef struct {
-	char name[BUFLEN];
-	char ip[BUFLEN];
-	bool active;
-	int quality;
-} NetworkInterface;
 
 /* function declarations (TODO replace some by modules) */
 void pollEvents(void);
