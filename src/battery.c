@@ -4,6 +4,9 @@
 #include "battery.h"
 #include "config/battery.h"
 #include "config/global.h"
+#include <stdio.h>
+#include <time.h>
+#include <math.h>
 
 /* function declaration */
 static int update(void);
@@ -35,7 +38,8 @@ battery_init(Module *mod)
 	snprintf(path_capacity, BUFLEN, "%s/capacity", path);
 	snprintf(path_status, BUFLEN, "%s/status", path);
 
-	return 0;
+	/* initial update */
+	return update();
 }
 
 static int
@@ -43,12 +47,6 @@ update(void)
 {
 	FILE *f;
 	double hours;
-
-	/* prevent from updating too often */
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return 0;
-	next_update = time(NULL) + update_interval;
 
 	/* battery state */
 	f = fopen(path_status, "r");

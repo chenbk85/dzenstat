@@ -1,6 +1,9 @@
 #include "memory.h"
 #include "config/memory.h"
 #include "config/global.h"
+#include <stdio.h>
+#include <time.h>
+#include <sys/sysinfo.h>
 
 static int update(void);
 static int term(void);
@@ -15,7 +18,9 @@ memory_init(Module *mod)
 	mod->update = update;
 	mod->term = term;
 	dy = mod->display;
-	return 0;
+
+	/* initial update */
+	return update();
 }
 
 static int
@@ -23,12 +28,6 @@ update(void)
 {
 	FILE *f;
 	int i;
-
-	/* prevent from updating too often */
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return 0;
-	next_update = time(NULL) + update_interval;
 
 	/* open file */
 	f = fopen(path, "r");

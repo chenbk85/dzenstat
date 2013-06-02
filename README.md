@@ -6,10 +6,10 @@ ayekat/dzenstat README
 console. It is meant to be used in combination with
 <a href="http://github.com/robm/dzen/">dzen2</a>.
 
-Please note that this program is still in early development, and meant to work
-mainly for my own needs.
+Please note that this program is still in early development, so it's very likely
+that things are buggy.
 
-But of course you may use the source code to build your own little tools.
+However it should not break anything on the system, so feel free to test!
 
 
 have a screenshot!
@@ -21,14 +21,26 @@ Just to give you an impression what it looks like:
 
 
 
-configure & build
------------------
+configure
+---------
 
-In the spirit of <a href="http://dwm.suckless.org/">dwm</a>, configuration is
-simply done by editing the source code; the header file <code>config.h</code>
-contains variables.
+dzenstat is organised in *modules* -- you can think of them as "widgets".
 
-To build, simply compile with
+<code>src/modules.h</code> contains an array that, for each module, holds the
+corresponding function to be called to initialise the module; dzenstat will
+arrange them in the same order.
+
+In order to fine-tune the modules, <code>src/config</code> holds a bunch of
+header files to configure each of them.
+
+THE 'MODULES' WAY OF CONFIGURING DZENSTAT HAS ONLY RECENTLY BEEN ADDED -- EXPECT
+BUGS!
+
+
+build
+-----
+
+To build, compile with
 
 	make
 

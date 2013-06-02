@@ -6,6 +6,8 @@
 #include "config/cpu.h"
 #include <time.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 typedef struct {
 	int busy_last, idle_last;
@@ -19,8 +21,8 @@ static char *dy;
 
 static int temperature;
 
-static int cpu_update(void);
-static int cpu_term(void);
+static int update(void);
+static int term(void);
 
 int
 cpu_init(Module *mod)
@@ -30,9 +32,8 @@ cpu_init(Module *mod)
 	char buf[BUFLEN];
 	dy = mod->display;
 
-	/* load */
-	mod->update = cpu_update;
-	mod->term = cpu_term;
+	mod->update = update;
+	mod->term = term;
 
 	/* check if file exists */
 	f = fopen(path_load, "r");
@@ -52,8 +53,6 @@ cpu_init(Module *mod)
 	for (i = 0; i < num_cores; ++i)
 		cores[i] = malloc(sizeof(Core));
 	
-	/* temperature */
-
 	/* determine temperature path */
 	path_temp = NULL;
 	for (i = 0; i < sizeof(paths_temp); ++i) {
@@ -65,23 +64,18 @@ cpu_init(Module *mod)
 		}
 	}
 
-	return 0;
+	/* initial update */
+	return update();
 }
 
 static int
-cpu_update(void)
+update(void)
 {
 	FILE *f;
 	int i;
 	char w[16], e[16];
 	int busy_tot, idle_tot, busy_diff, idle_diff, usage;
 	int user, nice, system, idle, iowait, irq, softirq, steal, guest,guest_nice;
-
-	/* prevent from updating too often */
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return 0;
-	next_update = time(NULL) + update_interval;
 
 	/* usage */
 	f = fopen(path_load, "r");
@@ -145,7 +139,7 @@ cpu_update(void)
 }
 
 static int
-cpu_term(void)
+term(void)
 {
 	/* TODO */
 	return 0;

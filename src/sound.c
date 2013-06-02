@@ -1,6 +1,10 @@
+/* dzenstat module for sound (ALSA)
+ */
+
 #include "sound.h"
 #include "config/global.h"
 #include "config/sound.h"
+#include <alsa/asoundlib.h>
 
 static int interrupt(void);
 static int term(void);
@@ -59,9 +63,7 @@ sound_init(Module *mod)
 	snd_mixer_selem_get_playback_volume_range(elem, &min, &max);
 
 	/* initial update */
-	interrupt();
-
-	return 0;
+	return interrupt();
 }
 
 static int

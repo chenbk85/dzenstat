@@ -4,6 +4,15 @@
 #include "network.h"
 #include "config/network.h"
 #include "config/global.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <linux/rtnetlink.h>
+#include <unistd.h>
 
 #define NUMIFS 10
 
@@ -45,10 +54,8 @@ network_init(Module *m)
 	mod->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	bind(mod->fd, (struct sockaddr *) &sa, sizeof(sa));
 
-	/* initial interface scan */
-	ifscan();
-
-	return 0;
+	/* initial update */
+	return ifscan() || update();
 }
 
 static int
@@ -56,12 +63,6 @@ update(void)
 {
 	FILE *f;
 	int i;
-
-	/* prevent from updating too often */
-	static clock_t next_update = 0;
-	if (time(NULL) < next_update)
-		return 0;
-	next_update = time(NULL) + update_interval;
 
 	dy[0] = 0;
 	for (i = 0; i < NUMIFS; ++i) {

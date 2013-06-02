@@ -5,53 +5,36 @@
 #include "dzenstat.h"
 #include "config/global.h"
 #include "modules.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <time.h>
+#include <signal.h>
+#include <sys/select.h>
 
-/* variables (TODO replace some by modules) */
-struct tm *date;
+#define die() exit(EXIT_FAILURE)
+
+/* function declarations */
+static void init(void);
+static void run(void);
+static void display(void);
+static void poll_events(void);
+static void sig_handle(int sig);
+static void term(void);
+static void update_date(void);
+
+/* variables */
 struct timeval longdelay;
-time_t rawtime;
 bool interrupted;
 fd_set fds;
 
+/* variables for date (TODO: transform into module) */
+time_t rawtime;
+struct tm *date;
+
 /* seperator icons */
 char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
-
-void
-pollEvents(void)
-{
-	int s;
-
-	longdelay.tv_sec = 0;
-	longdelay.tv_usec = 900000;  /* 900000 µs = 900 ms = 0.9 s */
-
-	do {
-		/* add file_descriptors */
-		FD_ZERO(&fds);
-		FD_SET(modules[4].fd, &fds);
-		FD_SET(modules[2].fd, &fds);
-
-		/* wait for activity */
-		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
-
-		/* handle return value */
-		if (s < 0)  /* error */
-			return;
-		if (!s)     /* timeout */
-			return;
-
-		/* network */
-		if (FD_ISSET(modules[2].fd, &fds)) {
-			/* clear data in buffer */
-			modules[2].interrupt();
-		}
-
-		/* sound */
-		if (FD_ISSET(modules[4].fd, &fds)) {
-			modules[4].interrupt();
-		}
-
-	} while (longdelay.tv_usec > 0);
-}
 
 unsigned int
 colour(int val)
@@ -62,78 +45,48 @@ colour(int val)
 	       51;
 }
 
-void
-die(void)
-{
-	exit(EXIT_FAILURE);
-}
-
-void
+static void
 display(void)
 {
-	while (!interrupted) {
-		updateDate();
-		pollEvents();
+	int i;
 
-		if (modules[0].update() < 0)
-			printf("RAM:ERROR");
-		else
-			printf("%s", modules[0].display);
-		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
-
-		if (modules[1].update() < 0)
-			printf("CPU:ERROR");
-		else
-			printf("%s", modules[1].display);
-		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
-
-		if (modules[2].update() < 0)
-			printf("NET:ERROR");
-		else
-			printf("%s", modules[2].display);
-		printf("   ^fg(#%X)%s^fg()   ", colour_sep, rsep);
-
-		if (modules[3].update() < 0)
-			printf("BAT:ERROR");
-		else
-			printf("%s", modules[3].display);
+	/* modules */
+	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
-
-		printf("%s", modules[4].display);
-		printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
-				colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
-
-		/* date */
-		printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
-				date->tm_mon+1, path_icons, colour_medium);
-		printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%X) ",
-				date->tm_mday, path_icons, colour_medium);
-		printf("(^i(%s/glyph_japanese_%d.xbm))",
-				path_icons, date->tm_wday);
-		printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
-				colour_light_bg, lfsep, colour_light_bg, colour_light);
-
-		/* time */
-		printf("%02d:%02d",
-				date->tm_hour, date->tm_min);
-		printf("  ^bg()^fg()");
-
-		/* end */
-		printf("\n");
+		printf("%s", modules[i].display);
 	}
+
+	/* date (TODO: transform into module) */
+	printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
+			colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
+	printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
+			date->tm_mon+1, path_icons, colour_medium);
+	printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%X) ",
+			date->tm_mday, path_icons, colour_medium);
+	printf("(^i(%s/glyph_japanese_%d.xbm))",
+			path_icons, date->tm_wday);
+
+	/* time */
+	printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
+			colour_light_bg, lfsep, colour_light_bg, colour_light);
+	printf("%02d:%02d",
+			date->tm_hour, date->tm_min);
+	printf("  ^bg()^fg()");
+
+	/* end */
+	printf("\n");
 }
 
-void
+static void
 init(void)
 {
 	int i;
 
+	/* needed for logging */
+	update_date();
+
 	/* force line buffering */
 	setvbuf(stdout, NULL, _IOLBF, 1024);
-
-	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-		modules[i].init(&modules[i]);
-	}
 
 	/* define separator icons */
 	snprintf(rfsep, BUFLEN, "^i(%s/glyph_2B80.xbm)", path_icons);
@@ -144,17 +97,84 @@ init(void)
 	/* register signal handler */
 	signal(SIGTERM, sig_handle);
 	signal(SIGINT, sig_handle);
+
+	/* initialise modules */
+	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+		modules[i].init(&modules[i]);
+	}
+
+	/* initial output */
+	display();
 }
 
-void
+static void
+poll_events(void)
+{
+	int i, s;
+
+	longdelay.tv_sec = update_interval;
+	longdelay.tv_usec = 0;  /* 900000 µs = 900 ms = 0.9 s */
+
+	do {
+		/* add file_descriptors */
+		FD_ZERO(&fds);
+		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+			if (modules[i].has_fd)
+				FD_SET(modules[i].fd, &fds);
+		}
+
+		/* wait for activity */
+		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
+		wrlog("select => %d.%06d\n", longdelay.tv_sec, longdelay.tv_usec);
+
+		/* check if event */
+		if (s < 0)  /* error */
+			return;
+		if (!s)     /* timeout */
+			return;
+
+		/* handle event and refresh */
+		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+			if (modules[i].has_fd && FD_ISSET(modules[i].fd, &fds))
+				modules[i].interrupt();
+		}
+		display();
+	} while (longdelay.tv_sec > 0 && longdelay.tv_usec > 0);
+}
+
+static void
+run(void)
+{
+	int i;
+
+	interrupted = false;
+	while (!interrupted) {
+		poll_events();
+		update_date(); /* TODO: transform into module */
+		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+			if (!modules[i].ignore && modules[i].update() < 0)
+				sprintf(modules[i].display, "ERROR");
+		}
+		display();
+	}
+}
+
+static void
 sig_handle(int sig)
 {
-	/* we greatfully complete a loop instead of heartlessly jumping out */
+	wrlog("received signal, shutting down ...\n");
 	interrupted = true;
 }
 
-void
-updateDate(void)
+static void
+term(void)
+{
+	/* TODO */
+}
+
+/* TODO: transform into module */
+static void
+update_date(void)
 {
 	time(&rawtime);
 	date = localtime(&rawtime);
@@ -174,11 +194,10 @@ wrlog(char const *format, ...)
 int
 main(int argc, char **argv)
 {
-	updateDate(); /* needed for logging */
-	interrupted = false;
 	init();
-	display();
-	wrlog("received shutdown signal ...\n");
+	run();
+	term();
+
 	return EXIT_SUCCESS;
 }
 
