@@ -3,14 +3,13 @@
 #include "config/global.h"
 #include <stdio.h>
 #include <time.h>
-#include <sys/sysinfo.h>
+#include <sys/sysinfo.h> /* for alternative approach, see below */
 
 static int update(void);
 static int term(void);
 static char *dy;
 
 static int used, total, percentage;
-static struct sysinfo info;
 
 int
 memory_init(Module *mod)
@@ -28,6 +27,13 @@ update(void)
 {
 	FILE *f;
 	int i;
+
+	/* alternative approach, that does however not respect cache memory:
+	sysinfo info;
+	sysinfo(&info);
+	int stotal = info.totalram;
+	int sused = stotal - info.freeram - info.bufferram;
+	*/
 
 	/* open file */
 	f = fopen(path, "r");
