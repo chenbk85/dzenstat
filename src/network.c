@@ -62,13 +62,17 @@ static int
 update(void)
 {
 	FILE *f;
-	int i;
+	int i, c=0;
 
 	dy[0] = 0;
 	for (i = 0; i < NUMIFS; ++i) {
 		/* check if network interface */
 		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
 			continue;
+
+		/* separator if there's been an interface before */
+		if (c > 0)
+			snprintf(dy+strlen(dy), DISPLEN-strlen(dy), "  ");
 
 		/* quality (if wlan) */
 		if (!strcmp(netifs[i]->name, "wlan0")) {
@@ -101,7 +105,13 @@ update(void)
 		snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
 				" ^fg(#%X)%s^fg()",
 				netifs[i]->active ? colour_hl : colour_err, netifs[i]->ip);
+
+		/* counter */
+		c++;
 	}
+
+	if (c == 0)
+		sprintf(dy, "no network");
 
 	return 0;
 }
@@ -175,7 +185,7 @@ ifscan(void)
 			/* state (UP/DOWN) */
 			netifs[j]->active = (!ioctl(sd, SIOCGIFFLAGS, &ifr[i]) &&
 					ifr[i].ifr_flags | IFF_UP);
-			++j;
+			j++;
 		}
 	}
 	close(sd);

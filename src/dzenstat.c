@@ -11,7 +11,6 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
-#include <sys/select.h>
 
 #define die() exit(EXIT_FAILURE)
 
@@ -52,7 +51,8 @@ display(void)
 
 	/* modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-		printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
+		if (i > 0)
+			printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 		printf("%s", modules[i].display);
 	}
 
