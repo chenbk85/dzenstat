@@ -48,7 +48,7 @@ network_init(Module *m)
 	/* prepare fields */
 	memset(&sa, 0, sizeof(sa));
 	sa.nl_family = AF_NETLINK;
-	sa.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR; /*TODO up/down events*/
+	sa.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR; /* TODO: up/down events */
 
 	/* get file descriptor */
 	mod->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
@@ -66,38 +66,41 @@ update(void)
 
 	dy[0] = 0;
 	for (i = 0; i < NUMIFS; ++i) {
+		/* check if network interface */
 		if (!netifs[i] || (!netifs[i]->active && !show_inactive_if))
 			continue;
+
+		/* quality (if wlan) */
 		if (!strcmp(netifs[i]->name, "wlan0")) {
-			/* quality (if wlan) */
-			if (!strcmp(netifs[i]->name, "wlan0")) {
-				f = fopen("/proc/net/wireless", "r");
-				if (f == NULL) {
-					wrlog("Failed to open file: /proc/net/wireless\n");
-					return -1;
-				}
-				fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
-						&netifs[i]->quality);
-				if (ferror(f)) {
-					fclose(f);
-					wrlog("Failed to open file: /proc/net/wireless\n");
-					fclose(f);
-					return -1;
-				}
-				fclose(f);
+			f = fopen("/proc/net/wireless", "r");
+			if (f == NULL) {
+				wrlog("Failed to open file: /proc/net/wireless\n");
+				return -1;
 			}
+			fscanf(f, "%*[^\n]\n%*[^\n]\n%*s %*d %d.%*s",
+					&netifs[i]->quality);
+			if (ferror(f)) {
+				fclose(f);
+				wrlog("Failed to open file: /proc/net/wireless\n");
+				fclose(f);
+				return -1;
+			}
+			fclose(f);
 			snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
 					"^fg(#%X)^i(%s/glyph_wifi_%d.xbm)^fg()",
 					colour(netifs[i]->quality), path_icons,
 					netifs[i]->quality/20);
 		}
+
+		/* ethernet icon (if eth) */
 		if (!strcmp(netifs[i]->name, "eth0"))
 			snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
 					"^i(%s/glyph_eth.xbm)", path_icons);
+
+		/* IP address */
 		snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
-				"  ^fg(#%X)%s^fg()   ^fg(#%X)%s^fg()   ",
-				netifs[i]->active ? colour_hl : colour_err,
-				netifs[i]->ip, colour_sep, "|"/*lsep*/);
+				" ^fg(#%X)%s^fg()",
+				netifs[i]->active ? colour_hl : colour_err, netifs[i]->ip);
 	}
 
 	return 0;

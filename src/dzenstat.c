@@ -52,12 +52,12 @@ display(void)
 
 	/* modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-		printf("   ^fg(#%X)%s^fg()   ", colour_sep, lsep);
+		printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 		printf("%s", modules[i].display);
 	}
 
 	/* date (TODO: transform into module) */
-	printf("   ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
+	printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 			colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 	printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
 			date->tm_mon+1, path_icons, colour_medium);
@@ -67,7 +67,7 @@ display(void)
 			path_icons, date->tm_wday);
 
 	/* time */
-	printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
+	printf(" ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 			colour_light_bg, lfsep, colour_light_bg, colour_light);
 	printf("%02d:%02d",
 			date->tm_hour, date->tm_min);
@@ -125,7 +125,6 @@ poll_events(void)
 
 		/* wait for activity */
 		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
-		wrlog("select => %d.%06d\n", longdelay.tv_sec, longdelay.tv_usec);
 
 		/* check if event */
 		if (s < 0)  /* error */
