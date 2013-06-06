@@ -53,7 +53,7 @@ display(void)
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		if (i > 0)
 			printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
-		printf("%s", modules[i].display);
+		printf("%s", modules[i].stumbled ? "STUMBLED" : modules[i].display);
 	}
 
 	/* date (TODO: transform into module) */
@@ -100,7 +100,7 @@ init(void)
 
 	/* initialise modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-		modules[i].init(&modules[i]);
+		modules[i].stumbled = modules[i].init(&modules[i]) < 0;
 	}
 
 	/* initial output */
@@ -151,7 +151,8 @@ run(void)
 		poll_events();
 		update_date(); /* TODO: transform into module */
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-			if (!modules[i].ignore && modules[i].update() < 0)
+			if (!modules[i].ignore && !modules[i].stumbled
+					&& modules[i].update() < 0)
 				sprintf(modules[i].display, "ERROR");
 		}
 		display();

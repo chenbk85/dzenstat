@@ -20,6 +20,7 @@ typedef struct Module {
 	bool has_fd;                         /* listen to events? */
 	int fd;                              /* ... if yes, file descriptor */
 	char display[DISPLEN];               /* module display */
+	bool stumbled;                       /* failed to initialise? */
 } Module;
 
 /* Returns a colour depending on the value from red (0) to green (100).
