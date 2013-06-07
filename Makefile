@@ -1,5 +1,5 @@
 CC=gcc
-LDLIBS=-lm -lasound
+LDLIBS=-lm -lasound -lmpdclient
 LDFLAGS=
 CFLAGS=-DHOST_$(shell hostname) -Wall -Wpedantic -std=gnu99 -g
 SOURCES=$(wildcard src/*.c)

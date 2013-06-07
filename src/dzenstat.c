@@ -98,6 +98,8 @@ init(void)
 	signal(SIGTERM, sig_handle);
 	signal(SIGINT, sig_handle);
 
+	wrlog("initialising ...\n");
+
 	/* initialise modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].stumbled = modules[i].init(&modules[i]) < 0;
@@ -119,7 +121,7 @@ poll_events(void)
 		/* add file_descriptors */
 		FD_ZERO(&fds);
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-			if (modules[i].has_fd)
+			if (!modules[i].stumbled && modules[i].has_fd)
 				FD_SET(modules[i].fd, &fds);
 		}
 
@@ -134,8 +136,9 @@ poll_events(void)
 
 		/* handle event and refresh */
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-			if (modules[i].has_fd && FD_ISSET(modules[i].fd, &fds))
-				modules[i].interrupt();
+			if (modules[i].has_fd && FD_ISSET(modules[i].fd, &fds)
+					&& modules[i].interrupt() < 0)
+				sprintf(modules[i].display, "ERROR");
 		}
 		display();
 	} while (longdelay.tv_sec > 0 && longdelay.tv_usec > 0);
@@ -169,7 +172,11 @@ sig_handle(int sig)
 static void
 term(void)
 {
-	/* TODO */
+	int i;
+
+	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+		modules[i].term();
+	}
 }
 
 /* TODO: transform into module */

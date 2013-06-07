@@ -15,11 +15,13 @@
 #include "network.h"
 #include "battery.h"
 #include "sound.h"
+#include "mpd.h"
 
 static Module modules[] = {
 	{ .init = memory_init },
 	{ .init = cpu_init },
 	{ .init = network_init },
+	{ .init = mpd_init },
 	{ .init = battery_init },
 	{ .init = sound_init },
 };
