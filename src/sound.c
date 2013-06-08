@@ -93,7 +93,6 @@ interrupt(void)
 static int
 term(void)
 {
-	/* TODO */
 	return 0;
 }
 

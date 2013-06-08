@@ -14,15 +14,16 @@ typedef struct {
 	int load;
 } Core;
 
+/* function declaration */
+static int update(void);
+static int term(void);
+
+/* variable declaration */
 static int num_cores;
 static Core **cores;
 static char const *path_temp;
-static char *dy;
-
 static int temperature;
-
-static int update(void);
-static int term(void);
+static char *dy;
 
 int
 cpu_init(Module *mod)
@@ -142,7 +143,13 @@ update(void)
 static int
 term(void)
 {
-	/* TODO */
+	int i;
+
+	/* remove Core structures */
+	for (i = 0; i < num_cores; i++)
+		free(cores[i]);
+	free(cores);
+
 	return 0;
 }
 

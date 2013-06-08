@@ -6,9 +6,9 @@ ayekat/dzenstat README
 console. It is meant to be used in combination with
 <a href="http://github.com/robm/dzen/">dzen2</a>.
 
-Please note that this program is still in early development, so it's very likely
-that things are buggy. However it should not break anything on the system, so
-feel free to test!
+Please note that this programme is still in early development, so it's very
+likely that things are buggy. However it should not break anything on the
+system, so feel free to test!
 
 
 screenshot

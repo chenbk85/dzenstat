@@ -27,6 +27,7 @@ typedef struct {
 static int update(void);
 static int interrupt(void);
 static int ifscan(void);
+static void clear(void);
 static int term(void);
 
 /* variable declaration */
@@ -137,12 +138,7 @@ ifscan(void)
 	int sd, i, j=0, ifnum, addr;
 
 	/* clear old interfaces */
-	for (i = 0; i < NUMIFS; ++i) {
-		if (netifs[i]) {
-			free(netifs[i]);
-			netifs[i] = NULL;
-		}
-	}
+	clear();
 
 	/* create a socket where we can use ioctl to retrieve interface info */
 	sd = socket(PF_INET, SOCK_DGRAM, 0);
@@ -192,10 +188,24 @@ ifscan(void)
 	return 0;
 }
 
+static void
+clear(void)
+{
+	int i;
+
+	/* clear old interfaces */
+	for (i = 0; i < NUMIFS; ++i) {
+		if (netifs[i]) {
+			free(netifs[i]);
+			netifs[i] = NULL;
+		}
+	}
+}
+
 static int
 term(void)
 {
-	/* TODO */
+	clear();
 	return 0;
 }
 

@@ -76,6 +76,13 @@ get_info(void)
 		return -1;
 	}
 
+	/* check if we need to display something */
+	if (state == MPD_STATE_STOP || state == MPD_STATE_UNKNOWN ||
+			(hide_paused && state == MPD_STATE_PAUSE)) {
+		m->hide = true;
+		return 0;
+	}
+
 	/* get song */
 	mpd_send_current_song(con);
 	while ((song = mpd_recv_song(con)) != NULL) {
@@ -89,14 +96,10 @@ get_info(void)
 		}
 	}
 
-	/* update display */
-	if (hide_paused && state != MPD_STATE_PLAY)
-		m->hide = true;
-	else {
-		m->hide = false;
-		sprintf(dy, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
-				state == MPD_STATE_PLAY ? colour_ok : colour_medium_bg, path_icons, title);
-	}
+	m->hide = false;
+	sprintf(dy, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
+			state == MPD_STATE_PLAY ? colour_ok : colour_medium_bg,
+			path_icons, title);
 
 	/* send command for next event; react on state changes (play, pause, stop)*/
 	mpd_send_idle_mask(con, MPD_IDLE_PLAYER);

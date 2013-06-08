@@ -65,7 +65,8 @@ update(void)
 static int
 term(void)
 {
-	/* TODO */
+	/* nothing */
+
 	return 0;
 }
 
