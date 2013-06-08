@@ -53,7 +53,7 @@ display(void)
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		if (modules[i].hide)
 			continue;
-		if (i > 0)
+		if (i > 0 && !modules[i-1].noborder && !modules[i].noborder)
 			printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
 		printf("%s", modules[i].stumbled ? "STUMBLED" : modules[i].display);
 	}
@@ -143,6 +143,8 @@ poll_events(void)
 		}
 		display();
 	} while (longdelay.tv_sec > 0 && longdelay.tv_usec > 0);
+
+	return 0;
 }
 
 static void
@@ -196,6 +198,13 @@ void
 wrlog(char const *format, ...)
 {
 	va_list args;
+	time_t rawtime;
+	struct tm *date;
+
+	/* update timestamp */
+	time(&rawtime);
+	date = localtime(&rawtime);
+
 	fprintf(stderr, "[%02d:%02d:%02d] dzenstat: ",
 			date->tm_hour, date->tm_min, date->tm_sec);
 	va_start(args, format);

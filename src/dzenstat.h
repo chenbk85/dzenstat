@@ -22,6 +22,7 @@ typedef struct Module {
 	char display[DISPLEN];               /* module display */
 	bool stumbled;                       /* failed to initialise? */
 	bool hide;                           /* hide module? */
+	bool noborder;                       /* hide border? */
 } Module;
 
 /* Returns a colour depending on the value from red (0) to green (100).
@@ -31,6 +32,10 @@ unsigned int colour(int val);
 /* Writes a message to stderr.
  */
 void wrlog(char const *format, ...);
+
+/* Useful variables.
+ */
+extern char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
 
 #endif
 
