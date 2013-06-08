@@ -18,7 +18,7 @@
 static void init(void);
 static void run(void);
 static void display(void);
-static void poll_events(void);
+static int poll_events(void);
 static void sig_handle(int sig);
 static void term(void);
 static void update_date(void);
@@ -111,13 +111,13 @@ init(void)
 	display();
 }
 
-static void
+static int
 poll_events(void)
 {
 	int i, s;
 
 	longdelay.tv_sec = update_interval;
-	longdelay.tv_usec = 0;  /* 900000 µs = 900 ms = 0.9 s */
+	longdelay.tv_usec = 0;
 
 	do {
 		/* add file_descriptors */
@@ -130,11 +130,10 @@ poll_events(void)
 		/* wait for activity */
 		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
 
-		/* check if event */
 		if (s < 0)  /* error */
-			return;
+			return -1;
 		if (!s)     /* timeout */
-			return;
+			return 0;
 
 		/* handle event and refresh */
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
@@ -153,7 +152,11 @@ run(void)
 
 	interrupted = false;
 	while (!interrupted) {
-		poll_events();
+		if (poll_events() < 0) {
+			wrlog("poll_events(): fatal error\n");
+			interrupted = true;
+			return;
+		}
 		update_date(); /* TODO: transform into module */
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 			if (!modules[i].ignore && !modules[i].stumbled
