@@ -51,13 +51,15 @@ display(void)
 
 	/* modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
+		if (modules[i].hide)
+			continue;
 		if (i > 0)
-			printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
+			printf(" ^fg(#%X)%s^fg()  ", colour_sep, lsep);
 		printf("%s", modules[i].stumbled ? "STUMBLED" : modules[i].display);
 	}
 
 	/* date (TODO: transform into module) */
-	printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
+	printf(" ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
 			colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
 	printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
 			date->tm_mon+1, path_icons, colour_medium);

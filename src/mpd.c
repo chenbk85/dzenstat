@@ -2,6 +2,8 @@
  */
 
 #include "mpd.h"
+#include "config/global.h"
+#include "config/mpd.h"
 #include <mpd/client.h>
 #include <stdio.h>
 
@@ -11,31 +13,29 @@ static int get_info(void);
 
 static struct mpd_connection *con;
 static char *dy;
+static Module *m;
 
 int
 mpd_init(Module *mod)
 {
-	mod->interrupt = interrupt;
-	mod->term = term;
-	mod->ignore = true;
-	mod->has_fd = true;
-	dy = mod->display;
+	m = mod;
+	m->interrupt = interrupt;
+	m->term = term;
+	m->ignore = true;
+	m->has_fd = true;
+	dy = m->display;
 
 	/* connect & prepare */
 	con = mpd_connection_new(NULL, 0, 0);
 	if (mpd_connection_get_error(con) != MPD_ERROR_SUCCESS) {
-		wrlog("MPD error\n");
 		wrlog("MPD: %s\n", mpd_connection_get_error_message(con));
 		return -1;
 	}
-	mod->fd = mpd_connection_get_fd(con);
+	m->fd = mpd_connection_get_fd(con);
 
 	/* initial update */
 	if (get_info() < 0)
 		return -1;
-
-	/* react on state change events (playing, pause, stop, ...) */
-	mpd_send_idle_mask(con, MPD_IDLE_PLAYER);
 
 	return 0;
 
@@ -89,21 +89,16 @@ get_info(void)
 		}
 	}
 
-	sprintf(dy, "%s", title);
-	/* output */
-	/*
-	printf("Title:  %s\n"
-		   "Artist: %s\n"
-		   "Album:  %s\n"
-		   "State:  %s\n"
-		   "---\n",
-		   title, artist, album,
-		   state == MPD_STATE_PLAY ? "playing" :
-		   state == MPD_STATE_PAUSE ? "paused" :
-		   state == MPD_STATE_STOP ? "stopped" : "unknown");
-		   */
+	/* update display */
+	if (hide_paused && state != MPD_STATE_PLAY)
+		m->hide = true;
+	else {
+		m->hide = false;
+		sprintf(dy, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
+				state == MPD_STATE_PLAY ? colour_ok : colour_medium_bg, path_icons, title);
+	}
 
-	/* only react on state change events (playing, pause, stop, ...) */
+	/* send command for next event; react on state changes (play, pause, stop)*/
 	mpd_send_idle_mask(con, MPD_IDLE_PLAYER);
 
 	return 0;

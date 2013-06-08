@@ -135,11 +135,12 @@ update(void)
 	/* assemble output */
 	if (!discharging) {
 		snprintf(dy, DISPLEN,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()",
+				"^fg(#%X)%d%% ^i(%s/battery_%03d.xbm)^fg()",
 				colour_bat, capacity, path_icons, capacity/10*10);
 	} else {
 		snprintf(dy, DISPLEN,
-				"^fg(#%X)%d%% ^i(%s/glyph_battery_%02d.xbm)^fg()  ^fg(#%X)%dh %02dm %02ds^fg()",
+				"^fg(#%X)%d%% ^i(%s/battery_%03d.xbm)^fg() "
+				"^fg(#%X)%dh %02dm %02ds^fg()",
 				colour(capacity), capacity, path_icons,
 				capacity/10*10, colour_hl, h, m, s);
 	}

@@ -21,6 +21,7 @@ typedef struct Module {
 	int fd;                              /* ... if yes, file descriptor */
 	char display[DISPLEN];               /* module display */
 	bool stumbled;                       /* failed to initialise? */
+	bool hide;                           /* hide module? */
 } Module;
 
 /* Returns a colour depending on the value from red (0) to green (100).

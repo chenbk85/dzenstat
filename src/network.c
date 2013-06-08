@@ -91,7 +91,7 @@ update(void)
 			}
 			fclose(f);
 			snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
-					"^fg(#%X)^i(%s/glyph_wifi_%d.xbm)^fg()",
+					"^fg(#%X)^i(%s/network_wifi_%d.xbm)^fg()",
 					colour(netifs[i]->quality), path_icons,
 					netifs[i]->quality/20);
 		}
@@ -99,7 +99,7 @@ update(void)
 		/* ethernet icon (if eth) */
 		if (!strcmp(netifs[i]->name, "eth0"))
 			snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
-					"^i(%s/glyph_eth.xbm)", path_icons);
+					"^i(%s/network_eth.xbm)", path_icons);
 
 		/* IP address */
 		snprintf(dy+strlen(dy), DISPLEN-strlen(dy),

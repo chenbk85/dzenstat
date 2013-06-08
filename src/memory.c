@@ -55,9 +55,9 @@ update(void)
 
 	/* update display */
 	snprintf(dy, DISPLEN,
-			"RAM:  ^fg(#%X)%d%%  ^fg()(^fg(#%X)%.1fM^fg())",
-			colour_hl, percentage,
-			colour(100-percentage), used/1024.0);
+			"^fg(#%X)%d%%^fg() ^i(%s/memory.xbm) ^fg(#%X)%.1fM^fg()",
+			colour(100-percentage), percentage, path_icons, colour_hl,
+			used/1024.0);
 
 	return 0;
 }

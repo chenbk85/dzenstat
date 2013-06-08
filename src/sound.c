@@ -80,11 +80,11 @@ interrupt(void)
 	mute = s == 0;
 
 	if (mute)
-		snprintf(dy, DISPLEN, "^fg(#%X)^i(%s/volume_m.xbm) ^fg()%2ld%%",
+		snprintf(dy, DISPLEN, "^fg(#%X)^i(%s/sound_mute.xbm) ^fg()%2ld%%",
 				colour_err, path_icons, vol);
 	else
 		snprintf(dy, DISPLEN,
-				"^fg(#%X)^i(%s/volume_%ld.xbm) ^fg(#%X)%2ld%%^fg()",
+				"^fg(#%X)^i(%s/sound_%ld.xbm) ^fg(#%X)%2ld%%^fg()",
 				colour_ok, path_icons, vol/34, colour_hl, vol);
 
 	return 0;
