@@ -21,16 +21,11 @@ static void display(void);
 static int poll_events(void);
 static void sig_handle(int sig);
 static void term(void);
-static void update_date(void);
 
 /* variables */
 struct timeval longdelay;
 bool interrupted;
 fd_set fds;
-
-/* variables for date (TODO: transform into module) */
-time_t rawtime;
-struct tm *date;
 
 /* seperator icons */
 char lsep[BUFLEN], lfsep[BUFLEN], rsep[BUFLEN], rfsep[BUFLEN];
@@ -49,7 +44,6 @@ display(void)
 {
 	int i;
 
-	/* modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		if (modules[i].hide)
 			continue;
@@ -58,24 +52,6 @@ display(void)
 		printf("%s", modules[i].stumbled ? "STUMBLED" : modules[i].display);
 	}
 
-	/* date (TODO: transform into module) */
-	printf("  ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
-			colour_medium_bg, lfsep, colour_medium_bg, colour_medium);
-	printf("%d^fg()^i(%s/glyph_japanese_1.xbm)^fg(#%X) ",
-			date->tm_mon+1, path_icons, colour_medium);
-	printf("%d^fg()^i(%s/glyph_japanese_7.xbm)^fg(#%X) ",
-			date->tm_mday, path_icons, colour_medium);
-	printf("(^i(%s/glyph_japanese_%d.xbm))",
-			path_icons, date->tm_wday);
-
-	/* time */
-	printf(" ^fg(#%X)%s^bg(#%X)^fg(#%X)  ",
-			colour_light_bg, lfsep, colour_light_bg, colour_light);
-	printf("%02d:%02d",
-			date->tm_hour, date->tm_min);
-	printf("  ^bg()^fg()");
-
-	/* end */
 	printf("\n");
 }
 
@@ -83,9 +59,6 @@ static void
 init(void)
 {
 	int i;
-
-	/* needed for logging */
-	update_date();
 
 	/* force line buffering */
 	setvbuf(stdout, NULL, _IOLBF, 1024);
@@ -101,8 +74,6 @@ init(void)
 	signal(SIGINT, sig_handle);
 
 	wrlog("initialising ...\n");
-
-	/* initialise modules */
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].stumbled = modules[i].init(&modules[i]) < 0;
 	}
@@ -159,7 +130,6 @@ run(void)
 			interrupted = true;
 			return;
 		}
-		update_date(); /* TODO: transform into module */
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 			if (!modules[i].ignore && !modules[i].stumbled
 					&& modules[i].update() < 0)
@@ -184,14 +154,6 @@ term(void)
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].term();
 	}
-}
-
-/* TODO: transform into module */
-static void
-update_date(void)
-{
-	time(&rawtime);
-	date = localtime(&rawtime);
 }
 
 void

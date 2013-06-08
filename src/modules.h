@@ -16,6 +16,7 @@
 #include "battery.h"
 #include "sound.h"
 #include "mpd.h"
+#include "date.h"
 
 static Module modules[] = {
 	{ .init = memory_init },
@@ -24,6 +25,7 @@ static Module modules[] = {
 	{ .init = mpd_init },
 	{ .init = battery_init },
 	{ .init = sound_init },
+	{ .init = date_init },
 };
 
 #endif

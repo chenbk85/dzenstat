@@ -134,7 +134,7 @@ update(void)
 	}
 	snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
 			"^fg() %s%d%s°C",
-			temperature>=temp_crit ? e : temperature>=temp_high ? w:"",
+			temperature>=temp_crit ? e : temperature>=temp_high ? w : "",
 			temperature, temperature>=temp_high ? "^fg()" : "");
 
 	return 0;
