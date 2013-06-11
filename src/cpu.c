@@ -64,6 +64,9 @@ cpu_init(Module *mod)
 			break;
 		}
 	}
+	if (path_temp == NULL) {
+		return -1;
+	}
 
 	/* initial update */
 	return update();
@@ -123,14 +126,15 @@ update(void)
 	temperature /= 1000;
 
 	/* assemble output */
-	snprintf(w, 13, "^fg(#%X)", colour_warn);
-	snprintf(e, 13, "^fg(#%X)", colour_err);
+	snprintf(w, 13, "^fg(#%06X)", colour_warn);
+	snprintf(e, 13, "^fg(#%06X)", colour_err);
 	dy[0] = 0;
-	snprintf(dy, DISPLEN, "^i(%s/cpu.xbm) ^fg(#%X)",
+	snprintf(dy, DISPLEN, "^i(%s/cpu.xbm) ^fg(#%06X)",
 			path_icons, colour_hl);
 	for (i = 0; i < num_cores; i++) {
-		snprintf(dy+strlen(dy), DISPLEN-strlen(dy), "[%2d%%]",
-				cores[i]->load);
+		snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
+				"%s[%2d%%]^fg(#%06X)",
+				cores[i]->load ? "" : "^fg()", cores[i]->load, colour_hl);
 	}
 	snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
 			"^fg() %s%d%s°C",

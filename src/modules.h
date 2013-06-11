@@ -23,7 +23,9 @@ static Module modules[] = {
 	{ .init = cpu_init },
 	{ .init = network_init },
 	{ .init = mpd_init },
+#ifdef HOST_ixh
 	{ .init = battery_init },
+#endif
 	{ .init = sound_init },
 	{ .init = date_init },
 };

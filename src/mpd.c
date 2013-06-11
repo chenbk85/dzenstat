@@ -97,7 +97,7 @@ get_info(void)
 	}
 
 	m->hide = false;
-	sprintf(dy, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
+	snprintf(dy, DISPLEN, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
 			state == MPD_STATE_PLAY ? colour_ok : colour_medium_bg,
 			path_icons, title);
 

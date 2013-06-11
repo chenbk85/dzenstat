@@ -55,7 +55,7 @@ update(void)
 
 	/* update display */
 	snprintf(dy, DISPLEN,
-			"^fg(#%X)%d%%^fg() ^i(%s/memory.xbm) ^fg(#%X)%.1fM^fg()",
+			"^fg(#%06X)%d%%^fg() ^i(%s/memory.xbm) ^fg(#%X)%.1fM^fg()",
 			colour(100-percentage), percentage, path_icons, colour_hl,
 			used/1024.0);
 
