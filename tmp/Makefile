@@ -19,3 +19,6 @@ xorg: xorg.c
 pthread: pthread.c
 	$(CC) $(CFLAGS) $? -lpthread
 
+idle: idle.c
+	$(CC) $(CFLAGS) $? -lX11 -lXss
+
