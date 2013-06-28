@@ -3,18 +3,15 @@ ayekat/dzenstat README
 
 
 *dzenstat* is a simple monitor that prints system information out to the
-console. It is meant to be used in combination with
+console; it is meant to be used in combination with
 <a href="http://github.com/robm/dzen/">dzen2</a>.
 
 Please note that this programme is still in early development, so it's very
-likely that things are buggy. However it should not break anything on the
-system, so feel free to test!
+likely that things are buggy (see below).
 
 
 screenshot
 ----------
-
-Now with MPD support!
 
 ![screenshot](http://ayekat.ch/img/host/github.com/screen_dzenstat.png)
 
@@ -26,9 +23,7 @@ dzenstat is organised in *modules* - you can think of them as "widgets".
 
 <code>src/modules.h</code> contains an array that, for each module, holds the
 corresponding function to be called to initialise the module; dzenstat will
-arrange them in the same order (except date and time; they are currently
-hardcoded in the <code>display()</code> function, but will hopefully get
-exported to a module, too).
+arrange them in the same order.
 
 To configure the modules, <code>src/config</code> holds a bunch of header files
 that contain variables to customise the behaviour of the modules.
@@ -56,7 +51,7 @@ As mentioned above, dzenstat is meant to be used in combination with dzen2:
 
 	./dzenstat | dzen2 -ta r
 
-This will put a dzenstat bar on the upper right corner of your screen.
+This will put a dzenstat bar in the upper right corner of your screen.
 
 Run <code>dzen2 --help</code> or visit the
 <a href="http://github.com/robm/dzen/">dzen2</a> page for information about its
@@ -66,11 +61,15 @@ options.
 some notes
 ----------
 
-Currently there are not scripts to install dzenstat on the system, therefore it
+DO NOT ENABLE THE MPD MODULE! It somehow enters an infinite loop, freezes
+dzenstat and eats up all the CPU (and you most probably won't notice it, since
+dzenstat remains quiet and doesn't indicate the CPU temperature raise).
+
+Currently there are no scripts to install dzenstat on the system, therefore it
 must be invoked as described above. But of course you can change the
 <code>path\_icons</code> variable in the global config file to something like
 <code>/usr/share/dzenstat/icons</code>, put the icons there and install dzenstat
-to <code>/usr/bin</code>.
+to <code>/usr/bin</code> (or the same story, but in <code>~/.local</code>).
 
 However, as a sane default (= without configuring and installing), dzenstat will
 assume that you invoke it from the very directory the *icons* folder lies in.
