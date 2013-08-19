@@ -80,26 +80,24 @@ get_info(void)
 	if (state == MPD_STATE_STOP || state == MPD_STATE_UNKNOWN ||
 			(hide_paused && state == MPD_STATE_PAUSE)) {
 		m->hide = true;
-		return 0;
-	}
-
-	/* get song */
-	mpd_send_current_song(con);
-	while ((song = mpd_recv_song(con)) != NULL) {
-		snprintf(title,BUFLEN,"%s",mpd_song_get_tag(song,MPD_TAG_TITLE,0));
-		snprintf(artist,BUFLEN,"%s",mpd_song_get_tag(song,MPD_TAG_ARTIST,0));
-		snprintf(album,BUFLEN,"%s",mpd_song_get_tag(song,MPD_TAG_ALBUM,0));
-		mpd_song_free(song);
-		if (mpd_connection_get_error(con) != MPD_ERROR_SUCCESS) {
-			wrlog("MPD song: %s\n", mpd_connection_get_error_message(con));
-			return -1;
+	} else {
+		/* get song */
+		mpd_send_current_song(con);
+		while ((song = mpd_recv_song(con)) != NULL) {
+			snprintf(title,BUFLEN,"%s",mpd_song_get_tag(song,MPD_TAG_TITLE,0));
+			snprintf(artist,BUFLEN,"%s",mpd_song_get_tag(song,MPD_TAG_ARTIST,0));
+			snprintf(album,BUFLEN,"%s",mpd_song_get_tag(song,MPD_TAG_ALBUM,0));
+			mpd_song_free(song);
+			if (mpd_connection_get_error(con) != MPD_ERROR_SUCCESS) {
+				wrlog("MPD song: %s\n", mpd_connection_get_error_message(con));
+				return -1;
+			}
 		}
+		m->hide = false;
+		snprintf(dy, DISPLEN, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
+				state == MPD_STATE_PLAY ? colour_ok : colour_medium_bg,
+				path_icons, title);
 	}
-
-	m->hide = false;
-	snprintf(dy, DISPLEN, "^fg(#%X)^i(%s/mpd.xbm)^fg() %s",
-			state == MPD_STATE_PLAY ? colour_ok : colour_medium_bg,
-			path_icons, title);
 
 	/* send command for next event; react on state changes (play, pause, stop)*/
 	mpd_send_idle_mask(con, MPD_IDLE_PLAYER);

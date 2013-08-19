@@ -2,5 +2,5 @@
  */
 
 /* Hide MPD module if paused? */
-static bool hide_paused = false;
+static bool hide_paused = true;
 
