@@ -11,6 +11,7 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
 
 #define die() exit(EXIT_FAILURE)
 
@@ -45,10 +46,12 @@ display(void)
 	int i;
 
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-		if (modules[i].hide)
+		if (modules[i].hide) {
 			continue;
-		if (i > 0 && !modules[i-1].noborder && !modules[i].noborder)
+		}
+		if (i > 0 && !modules[i-1].noborder && !modules[i].noborder) {
 			printf("  ^fg(#%X)%s^fg()   ", colour_sep, lsep);
+		}
 		printf("%s", modules[i].stumbled ? "STUMBLED" : modules[i].display);
 	}
 
@@ -76,8 +79,9 @@ init(void)
 	wrlog("initialising ...\n");
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].stumbled = modules[i].init(&modules[i]) < 0;
-		if (modules[i].stumbled)
+		if (modules[i].stumbled) {
 			wrlog("module %d stumbled\n");
+		}
 	}
 
 	/* initial output */
@@ -96,23 +100,27 @@ poll_events(void)
 		/* add file_descriptors */
 		FD_ZERO(&fds);
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-			if (!modules[i].stumbled && modules[i].has_fd)
+			if (!modules[i].stumbled && modules[i].has_fd) {
 				FD_SET(modules[i].fd, &fds);
+			}
 		}
 
 		/* wait for activity */
 		s = select(FD_SETSIZE, &fds, NULL, NULL, &longdelay);
 
-		if (s < 0)  /* error */
+		if (s < 0) { /* error or interrupt */
 			return -1;
-		if (!s)     /* timeout */
+		}
+		if (!s) {    /* timeout */
 			return 0;
+		}
 
 		/* handle event and refresh */
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-			if (modules[i].has_fd && FD_ISSET(modules[i].fd, &fds)
-					&& modules[i].interrupt() < 0)
+			if (modules[i].has_fd && FD_ISSET(modules[i].fd, &fds) &&
+					modules[i].interrupt() < 0) {
 				sprintf(modules[i].display, "ERROR");
+			}
 		}
 		display();
 	} while (longdelay.tv_sec > 0 && longdelay.tv_usec > 0);
@@ -128,14 +136,17 @@ run(void)
 	interrupted = false;
 	while (!interrupted) {
 		if (poll_events() < 0) {
-			wrlog("poll_events(): fatal error\n");
+			if (errno != EINTR) {
+				wrlog("poll_events(): fatal error (%s)\n", strerror(errno));
+			}
 			interrupted = true;
 			return;
 		}
 		for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
-			if (!modules[i].ignore && !modules[i].stumbled
-					&& modules[i].update() < 0)
+			if (!modules[i].ignore && !modules[i].stumbled &&
+					modules[i].update() < 0) {
 				sprintf(modules[i].display, "ERROR");
+			}
 		}
 		display();
 	}
