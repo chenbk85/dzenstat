@@ -6,9 +6,6 @@ ayekat/dzenstat README
 console; it is meant to be used in combination with
 <a href="http://github.com/robm/dzen/">dzen2</a>.
 
-Please note that this programme is still in early development, so it's very
-likely that things are buggy (see below).
-
 
 screenshot
 ----------
@@ -60,10 +57,6 @@ options.
 
 some notes
 ----------
-
-DO NOT ENABLE THE MPD MODULE! It somehow enters an infinite loop, freezes
-dzenstat and eats up all the CPU (and you most probably won't notice it, since
-dzenstat remains quiet and doesn't indicate the CPU temperature raise).
 
 Currently there are no scripts to install dzenstat on the system, therefore it
 must be invoked as described above. But of course you can change the
