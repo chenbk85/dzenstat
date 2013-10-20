@@ -90,7 +90,7 @@ update(void)
 		fclose(f);
 
 		/* charge percentage left */
-		capacity = 100 * charge_now / charge_full_design;
+		capacity = (double) charge_now / charge_full_design * 100;
 	}
 	
 	/* calculate from current capacity */
