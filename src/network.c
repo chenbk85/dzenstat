@@ -98,9 +98,16 @@ update(void)
 		}
 
 		/* ethernet icon (if eth) */
-		if (!strcmp(netifs[i]->name, "eth0"))
+		if (!strcmp(netifs[i]->name, "eth0")) {
 			snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
 					"^i(%s/network_eth.xbm)", path_icons);
+		}
+
+		/* VPN icon (if VPN) */
+		if (!strcmp(netifs[i]->name, "tun0")) {
+			snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
+					"^i(%s/network_tun.xbm)", path_icons);
+		}
 
 		/* IP address */
 		snprintf(dy+strlen(dy), DISPLEN-strlen(dy),
