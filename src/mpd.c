@@ -22,7 +22,6 @@ mpd_init(Module *mod)
 	m->interrupt = interrupt;
 	m->term = term;
 	m->ignore = true;
-	m->has_fd = true;
 	dy = m->display;
 
 	/* connect & prepare */
@@ -36,6 +35,9 @@ mpd_init(Module *mod)
 	/* initial update */
 	if (get_info() < 0)
 		return -1;
+
+	/* confirm file descriptor */
+	m->has_fd = true;
 
 	return 0;
 

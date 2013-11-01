@@ -80,7 +80,7 @@ init(void)
 	for (i = 0; i < sizeof(modules)/sizeof(Module); i++) {
 		modules[i].stumbled = modules[i].init(&modules[i]) < 0;
 		if (modules[i].stumbled) {
-			wrlog("module %d stumbled\n");
+			wrlog("module %d stumbled\n", i);
 		}
 	}
 

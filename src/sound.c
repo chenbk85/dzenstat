@@ -27,7 +27,6 @@ sound_init(Module *mod)
 	mod->term = term;
 	dy = mod->display;
 	mod->ignore = true; /* don't update periodically */
-	mod->has_fd = true; /* this module has a fd to listen to */
 
 	/* set up control interface */
 	ret += snd_mixer_open(&ctl, 0);
@@ -61,6 +60,9 @@ sound_init(Module *mod)
 
 	/* get volume range */
 	snd_mixer_selem_get_playback_volume_range(elem, &min, &max);
+
+	/* confirm file descripter */
+	mod->has_fd = true;
 
 	/* initial update */
 	return interrupt();

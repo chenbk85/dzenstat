@@ -44,7 +44,6 @@ network_init(Module *m)
 	mod->interrupt = interrupt;
 	mod->term = term;
 	dy = mod->display;
-	mod->has_fd = true;
 
 	/* prepare fields */
 	memset(&sa, 0, sizeof(sa));
@@ -56,7 +55,12 @@ network_init(Module *m)
 	bind(mod->fd, (struct sockaddr *) &sa, sizeof(sa));
 
 	/* initial update */
-	return ifscan() || update();
+	if (ifscan() == 0 && update() == 0) {
+		mod->has_fd = true;
+		return 0;
+	} else {
+		return -1;
+	}
 }
 
 static int
