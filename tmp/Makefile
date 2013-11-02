@@ -22,3 +22,5 @@ pthread: pthread.c
 idle: idle.c
 	$(CC) $(CFLAGS) $? -lX11 -lXss
 
+dbus: dbus.c
+	$(CC) $(CFLAGS) -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include $? -ldbus-1
